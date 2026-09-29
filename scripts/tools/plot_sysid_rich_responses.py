@@ -16,7 +16,7 @@ Example:
 
     /home/dyros/anaconda3/envs/cRobotics/bin/python \
       scripts/tools/plot_sysid_rich_responses.py \
-      --raw-root logs/sysid_raw
+      --raw-root data/sysid_raw
 """
 
 from __future__ import annotations
@@ -178,8 +178,8 @@ def write_summary(trials: dict[tuple[str, str], Trial], out_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--raw-root", type=Path, default=Path("logs/sysid_raw"))
-    parser.add_argument("--output-dir", type=Path, default=Path("logs/sysid_response_plots"))
+    parser.add_argument("--raw-root", type=Path, default=Path("data/sysid_raw"))
+    parser.add_argument("--output-dir", type=Path, default=Path("data/sysid_response_plots"))
     args = parser.parse_args()
 
     trials = discover_trials(args.raw_root)

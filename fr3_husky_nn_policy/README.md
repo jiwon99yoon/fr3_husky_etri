@@ -353,19 +353,19 @@ ros2 service call /fr3_consistency_probe_node/start_probe std_srvs/srv/Trigger {
 ### raw CSV 저장 위치
 
 `fr3_consistency_probe.launch.py`의 기본 `log_base`는
-`<cwd>/logs/consistency_raw`이며, launch 파일이 `use_mujoco`에 따라 자동으로
+`<repository>/data/consistency_raw`이며, launch 파일이 `use_mujoco`에 따라 자동으로
 `mujoco/` 또는 `real/`을 덧붙입니다. repository root에서 실행하므로, 각 sweep은
 활성 관절마다 CSV 하나(양팔 전체 sweep은 14개, 파일당 약 1.2 MB)를 repository에
 기록합니다.
 
 ~~~text
-logs/consistency_raw/
+data/consistency_raw/
 ├── mujoco/   # use_mujoco:=true  → left/right_fr3_joint{1..7}_*.csv
 └── real/     # use_mujoco:=false → left/right_fr3_joint{1..7}_*.csv
 ~~~
 
 다른 위치에 기록하려면 `log_base:=/some/other/dir`로 override하세요. raw sweep은
-크고 재생성할 수 있으므로, `logs/consistency_raw/`를 version 관리할지 gitignore할지는
+실험 데이터는 `data/consistency_raw/` 아래에서 version 관리합니다.
 프로젝트별로 결정하세요.
 
 마지막 trial도 q0로 돌아가 그곳에서 settle합니다. q0 mode에서는 의도적으로
@@ -405,13 +405,13 @@ Isaac Lab / Isaac Sim 식별 실행 전에 설정·응답 불일치를 확인할
 `--root`에는 `mujoco/`, `real/` subfolder가 들어 있는 directory를 지정하세요.
 
 ~~~bash
-# repository root에서 두 sweep이 logs/consistency_raw/에 기록된 뒤 실행
+# repository root에서 두 sweep이 data/consistency_raw/에 기록된 뒤 실행
 python3 scripts/tools/analyze_consistency_probe_logs.py \
-  --root logs/consistency_raw \
-  --out-dir logs/consistency_probe_comparison
+  --root data/consistency_raw \
+  --out-dir data/consistency_probe_comparison
 ~~~
 
-`--out-dir`의 기본값은 `logs/consistency_probe_comparison`입니다. 각 실행은
+`--out-dir`의 기본값은 `data/consistency_probe_comparison`입니다. 각 실행은
 version 관리해도 되는 가벼운 결과물(총 수 MB)을 생성합니다.
 
 ~~~text
@@ -526,11 +526,11 @@ parameter file에서 override하세요. scalar인 `friction_amplitude_rad`,
 
 ### SysID raw CSV
 
-`fr3_sysid.launch.py`는 `<cwd>/logs/sysid_raw/{mujoco,real}/`에 기록하므로,
+`fr3_sysid.launch.py`는 `<repository>/data/sysid_raw/{mujoco,real}/`에 기록하므로,
 이 repository에서 시작한 실행은 plant별로 분리됩니다.
 
 ~~~text
-logs/sysid_raw/
+data/sysid_raw/
 ├── mujoco/  # use_mujoco:=true
 └── real/    # hardware 실행
     └── left/right_fr3_joint*_sysid_rich_<timestamp>.csv
@@ -567,13 +567,13 @@ ros2 run xacro xacro \
 # 정지 residual 점검만 수행
 python3 scripts/tools/fit_sysid_dynamics_mujoco.py \
   --mjcf /tmp/dual_fr3_plate_nocam.xml \
-  --csv 'logs/sysid_raw/real/*.csv' \
+  --csv 'data/sysid_raw/real/*.csv' \
   --no-fit
 
 # 관절별 Coulomb/viscous friction과 bias 회귀
 python3 scripts/tools/fit_sysid_dynamics_mujoco.py \
   --mjcf /tmp/dual_fr3_plate_nocam.xml \
-  --csv 'logs/sysid_raw/real/*.csv'
+  --csv 'data/sysid_raw/real/*.csv'
 ~~~
 
 이 스크립트에는 MuJoCo Python package, NumPy 및 SciPy가 필요합니다. 시스템
@@ -607,7 +607,7 @@ mapping과 gravity 검증용입니다. 상세한 가정과 현재 검증 상태�
 4개를 아래에 기록합니다.
 
 ~~~text
-fr3_husky_nn_policy/log/<dual_fr3_reach|dual_fr3_reach_real>/<start time>/
+data/<dual_fr3_reach|dual_fr3_reach_real>/<start time>/
 ├── eef_trajectory.csv
 ├── policy_trace.csv
 ├── metadata.json

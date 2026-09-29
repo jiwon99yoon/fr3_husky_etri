@@ -32,7 +32,7 @@ DEFAULT_NOISE_REFERENCE_RUN = ABLATION_ROOT / (
 DEFAULT_UNMATCHED_NOISE_REFERENCE_RUN = ABLATION_ROOT / (
     "20260911_125923_617059_KST(100hz,unmatched dynamics)"
 )
-DEFAULT_OUTPUT_DIR = PACKAGE_ROOT / "trajectories"
+DEFAULT_OUTPUT_DIR = PACKAGE_ROOT.parent / "data" / "trajectories"
 
 sys.path.insert(0, str(PACKAGE_ROOT))
 from fr3_husky_nn_policy.reach_trajectory import (  # noqa: E402

@@ -139,7 +139,7 @@ source /home/dyros/etri_ws/install/setup.bash
 cd /home/dyros/etri_ws/src/fr3_husky_etri
 
 python3 scripts/tools/record_reach_v2_torque_response_mujoco.py \
-  --reference_metadata ../dual_fr3_lab/logs/torque_step/physx_reach_v2_torque_step.json \
+  --reference_metadata ../dual_fr3_lab/data/torque_step/physx_reach_v2_torque_step.json \
   --torque_rate_limit 1000 \
   --viz none
 ```
@@ -153,8 +153,8 @@ available, but should not be used for a direct PhysX–MuJoCo comparison.
 The default output is:
 
 ```text
-logs/torque_step/mujoco_reach_v2_torque_step.csv
-logs/torque_step/mujoco_reach_v2_torque_step.json
+data/torque_step/mujoco_reach_v2_torque_step.csv
+data/torque_step/mujoco_reach_v2_torque_step.json
 ```
 
 The MuJoCo CSV uses the same column names and trial ordering as the PhysX CSV.

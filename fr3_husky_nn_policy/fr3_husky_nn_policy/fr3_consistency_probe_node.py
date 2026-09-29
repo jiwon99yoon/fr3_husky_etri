@@ -845,7 +845,7 @@ class FR3ConsistencyProbeNode(Node):
         root = (
             Path(configured_root).expanduser()
             if configured_root
-            else Path(__file__).resolve().parents[1] / "log" / "consistency"
+            else Path(__file__).resolve().parents[2] / "data" / "consistency"
         )
         root.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%y%m%d_%H%M%S")

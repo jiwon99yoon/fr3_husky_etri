@@ -28,7 +28,7 @@ reference MJCF as described in ``about_sysid.md`` §8.3 (plate, no camera):
     /home/dyros/anaconda3/envs/cRobotics/bin/python \\
       scripts/tools/split_gravity_bias_friction.py \\
       --mjcf /tmp/dual_fr3_plate_nocam.xml \\
-      --csv 'logs/sysid_raw/real/*_2609*.csv'
+      --csv 'data/sysid_raw/real/*_2609*.csv'
 """
 
 from __future__ import annotations

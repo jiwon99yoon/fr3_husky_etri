@@ -440,7 +440,7 @@ class PPOReachPolicyNode(Node):
         log_root = (
             Path(configured_root).expanduser()
             if configured_root
-            else Path(__file__).resolve().parents[1] / "log"
+            else Path(__file__).resolve().parents[2] / "data"
         )
         try:
             self.run_logger = ReachRunLogger(

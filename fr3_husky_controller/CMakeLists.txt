@@ -36,7 +36,6 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
     geometry_msgs
     sensor_msgs
     urdf
-    pinocchio
     dyros_robot_controller
     fr3_husky_msgs
     franka_msgs
@@ -53,24 +52,13 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
 
 
 find_package(ament_cmake REQUIRED)
+find_package(pinocchio 4 REQUIRED)
+# The legacy FindBoost module shipped with older eigenpy releases defaults this
+# to ON, although Ubuntu's Boost packages provide the release runtime here.
+set(Boost_USE_DEBUG_RUNTIME OFF CACHE BOOL "Use the release Boost runtime" FORCE)
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
     find_package(${Dependency} REQUIRED)
 endforeach()
-
-# dyros_robot_controller was built against Pinocchio 3.x, whose legacy Coal
-# conversion header is not present in the ROS Humble Pinocchio 4.x package.
-# Keep the headers and shared library on the same Pinocchio ABI.
-find_path(DYROS_PINOCCHIO_INCLUDE_DIR
-    NAMES pinocchio/spatial/fcl-pinocchio-conversions.hpp
-    HINTS ${coal_INCLUDE_DIRS}
-    NO_DEFAULT_PATH
-)
-if(NOT DYROS_PINOCCHIO_INCLUDE_DIR)
-    message(FATAL_ERROR
-        "Could not find the Pinocchio 3.x headers required by dyros_robot_controller")
-endif()
-
-
 
 generate_parameter_library(fr3_controller_parameters
     src/fr3_controller_parameters.yaml
@@ -136,10 +124,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                            $<INSTALL_INTERFACE:include>
 )
-target_include_directories(${PROJECT_NAME} BEFORE PRIVATE
-                           ${DYROS_PINOCCHIO_INCLUDE_DIR}
-)
-
 target_link_libraries(${PROJECT_NAME} PUBLIC
                       fr3_controller_parameters
                       fr3_husky_controller_parameters

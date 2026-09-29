@@ -27,7 +27,7 @@ Then:
 
     python3 fit_sysid_dynamics_mujoco.py \
       --mjcf /tmp/dual_fr3_plate.xml \
-      --csv 'logs/sysid_raw/real/*.csv'
+      --csv 'data/sysid_raw/real/*.csv'
 
 By default the tool zeros ``dof_damping``, ``dof_frictionloss``, and
 ``dof_armature`` so ``mj_inverse`` returns the pure link rigid-body torque; the

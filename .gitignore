@@ -1,9 +1,8 @@
 .vscode
-/fr3_husky_nn_policy/log/
-/logs/torque_step/
-/log
-/logs
 /fr3_husky_nn_policy/ablation_mujoco
 /fr3_husky_nn_policy/ablation_realworld
+__pycache__/
+*.py[cod]
+/data/ros/
 /fr3_husky_nn_policy/fr3_husky_nn_policy/__pycache__
 /fr3_husky_nn_policy/test/__pycache__

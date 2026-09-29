@@ -70,7 +70,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path("logs/consistency_probe_comparison"),
+        default=Path("data/consistency_probe_comparison"),
         help="Directory for PNGs, summary.csv, and report.md.",
     )
     return parser

@@ -207,7 +207,7 @@ def _rpy_gravity(rpy):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--csv", required=True, nargs="+",
-                    help="CSV file(s) or glob(s), e.g. logs/sysid_raw/real/*.csv")
+                    help="CSV file(s) or glob(s), e.g. data/sysid_raw/real/*.csv")
     ap.add_argument("--urdf", default=DEFAULT_URDF)
     ap.add_argument("--stationary-qd", type=float, default=0.01,
                     help="|qd| below which all 14 joints count as stationary (rad/s)")

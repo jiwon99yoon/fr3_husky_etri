@@ -1,6 +1,7 @@
 """Launch the real rich-excitation data collector with the dual-FR3 controller."""
 
 import os
+from pathlib import Path
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -8,6 +9,9 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+REPOSITORY_ROOT = Path(os.path.realpath(__file__)).parents[2]
+DEFAULT_DATA_ROOT = REPOSITORY_ROOT / "data"
 
 
 def generate_launch_description():
@@ -128,7 +132,7 @@ def generate_launch_description():
             DeclareLaunchArgument("auto_start", default_value="false"),
             DeclareLaunchArgument(
                 "log_base",
-                default_value=os.path.join(os.getcwd(), "logs", "sysid_raw"),
+                default_value=str(DEFAULT_DATA_ROOT / "sysid_raw"),
             ),
             controller,
             sysid,

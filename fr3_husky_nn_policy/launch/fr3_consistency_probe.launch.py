@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -10,6 +11,9 @@ from launch.substitutions import (
 )
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+REPOSITORY_ROOT = Path(os.path.realpath(__file__)).parents[2]
+DEFAULT_DATA_ROOT = REPOSITORY_ROOT / "data"
 
 
 def generate_launch_description():
@@ -119,13 +123,12 @@ def generate_launch_description():
             DeclareLaunchArgument("home_timeout_s", default_value="45.0"),
             DeclareLaunchArgument("dry_run", default_value="false"),
             DeclareLaunchArgument("auto_start", default_value="false"),
-            # Raw probe CSVs default under the directory `ros2 launch` was
-            # invoked from (normally the repo root after `cd fr3_husky_etri`),
-            # so runs are versioned in logs/ alongside their analysis output.
+            # Raw probe CSVs are versioned in the repository data/ directory
+            # alongside their analysis output.
             # Override log_base:= to write elsewhere.
             DeclareLaunchArgument(
                 "log_base",
-                default_value=os.path.join(os.getcwd(), "logs", "consistency_raw"),
+                default_value=str(DEFAULT_DATA_ROOT / "consistency_raw"),
             ),
             controller,
             probe,

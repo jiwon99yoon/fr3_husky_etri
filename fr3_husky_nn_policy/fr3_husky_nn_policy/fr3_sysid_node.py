@@ -332,7 +332,7 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
         root = (
             Path(configured_root).expanduser()
             if configured_root
-            else Path(__file__).resolve().parents[1] / "log" / "sysid"
+            else Path(__file__).resolve().parents[2] / "data" / "sysid"
         )
         root.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%y%m%d_%H%M%S")

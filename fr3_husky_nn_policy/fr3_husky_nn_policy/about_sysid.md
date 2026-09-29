@@ -7,7 +7,7 @@
 > 용어 정정: 지금까지 "SysID probe"라고 부른 것은 실제로는
 > **response-comparison / consistency probe**(응답 비교·정합성 점검)다.
 > 코드 식별자(`fr3_consistency_probe_node`, `fr3_consistency_probe.launch.py`,
-> `analyze_consistency_probe_logs.py`, `logs/consistency_raw/`)는 그대로 두되, 개념적으로는
+> `analyze_consistency_probe_logs.py`, `data/consistency_raw/`)는 그대로 두되, 개념적으로는
 > "SysID를 했다"가 아니라 "설정/응답 정합성을 점검했다"로 이해한다.
 
 ---
@@ -119,7 +119,7 @@ q_ref(ramp) → [PD 제어기 Kp=80, Kd=4] → [plant] → q_measured
 
 ## 4. 현재 데이터 현황
 
-`fr3_consistency_probe_node`가 남기는 raw CSV(`logs/consistency_raw/{mujoco,real}/`)에는
+`fr3_consistency_probe_node`가 남기는 raw CSV(`data/consistency_raw/{mujoco,real}/`)에는
 SysID에 필요한 신호가 이미 들어 있다:
 
 - `t_sec`, `active_joint`, `cmd_offset_rad`, `tau_cmd_recon_nm`
@@ -261,13 +261,13 @@ xacro <stub_xacro> hand:=false with_realsense:=false with_azure:=false mobile:=f
 /home/dyros/anaconda3/envs/cRobotics/bin/python \
   scripts/tools/fit_sysid_dynamics_mujoco.py \
   --mjcf /tmp/dual_fr3_plate_nocam.xml \
-  --csv 'logs/sysid_raw/real/*.csv' --no-fit
+  --csv 'data/sysid_raw/real/*.csv' --no-fit
 
 # (3) 마찰/관성 fit (양방향 rich sweep 데이터에서만 유의미)
 /home/dyros/anaconda3/envs/cRobotics/bin/python \
   scripts/tools/fit_sysid_dynamics_mujoco.py \
   --mjcf /tmp/dual_fr3_plate_nocam.xml \
-  --csv 'logs/sysid_raw/real/*.csv'
+  --csv 'data/sysid_raw/real/*.csv'
 ~~~
 
 `fit_sysid_dynamics_mujoco.py` 옵션: `--keep-passive`(모델의

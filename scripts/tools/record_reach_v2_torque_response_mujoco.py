@@ -34,13 +34,13 @@ SCRIPT_PATH = Path(__file__).resolve()
 REPOSITORY_ROOT = SCRIPT_PATH.parents[2]
 DEFAULT_REFERENCE_METADATA = (
     REPOSITORY_ROOT.parent
-    / "dual_fr3_lab/logs/torque_step/physx_reach_v2_torque_step.json"
+    / "dual_fr3_lab/data/torque_step/physx_reach_v2_torque_step.json"
 )
 DEFAULT_MODEL_XACRO = (
     REPOSITORY_ROOT / "fr3_husky_description/mjcf/dual_fr3.xml.xacro"
 )
 DEFAULT_OUTPUT = (
-    REPOSITORY_ROOT / "logs/torque_step/mujoco_reach_v2_torque_step.csv"
+    REPOSITORY_ROOT / "data/torque_step/mujoco_reach_v2_torque_step.csv"
 )
 SOURCE_PACKAGE_PATHS = {
     "fr3_husky_description": REPOSITORY_ROOT / "fr3_husky_description",
