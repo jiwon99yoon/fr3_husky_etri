@@ -4,12 +4,21 @@
       Flat plate used by the Isaac reach task.
 
       The mesh origin is the FR3 flange/link8 mounting surface and the mesh
-      extends 25 mm along +Z.  The plate is deliberately massless here: the
-      source Isaac plate prim has visual/collision geometry but no authored
-      mass or density.  Dynamic inertia matching is handled separately.
+      extends 25 mm along +Z.  The installed plate assembly (including its
+      mounting hardware) was weighed at 132.4 g.  It is modelled as a uniform
+      140 x 140 x 25 mm rectangular solid; its COM is therefore 12.5 mm in
+      +Z from the flange surface.
     -->
     <xacro:macro name="plate_ee" params="prefix parent">
         <link name="${prefix}_plate_ee">
+            <!-- m = 0.1324 kg, I_COM = m/12 * diag(y^2+z^2,
+                 x^2+z^2, x^2+y^2), for x=y=0.140 m and z=0.025 m. -->
+            <inertial>
+                <origin xyz="0 0 0.0125" rpy="0 0 0"/>
+                <mass value="0.1324"/>
+                <inertia ixx="0.0002231492" ixy="0" ixz="0"
+                         iyy="0.0002231492" iyz="0" izz="0.0004325067"/>
+            </inertial>
             <visual>
                 <origin xyz="0 0 0" rpy="0 0 0"/>
                 <geometry>

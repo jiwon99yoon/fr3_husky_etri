@@ -234,9 +234,13 @@ dynamics를 호출하는 회귀·파라미터 반영·held-out torque RMSE는 �
 | 기존 consistency 데이터 검증 | gripper, 카메라 X | `hand:=true with_realsense:=false` |
 | **SysID 본실험 (이걸로 진행)** | **plate, 카메라 X** | `hand:=false with_realsense:=false` |
 
-주의: `hand:=false`면 MJCF가 link7에 **Isaac 학습용 plate 병합 관성**
-(`fr3_isaac_reach_inertials.yaml`)을 넣는다. 이는 **실제 plate와 같다는 보장이
-없으므로** plate 장착 real 데이터로 검증/보정해야 한다.
+`hand:=false`에서는 표준 FR3 link7 관성을 유지하고, link8 아래의 plate 고정
+body에 실제 계량한 assembly 물성을 넣는다. 현재 값은 `0.1324 kg`, flange 면에서
+COM `[0, 0, 0.0125] m`, 균일한 `140 x 140 x 25 mm` 직육면체 가정의
+`I_COM=[0.0002231492, 0.0002231492, 0.0004325067] kg m^2`다. 이는
+`fr3_isaac_reach_inertials.yaml`의 이전 `1.357143 kg` link7 override(사실상
+기존 Franka hand가 합쳐진 값)를 대체한다. FCI에는 link7을 합산하지 말고, 같은
+외부 plate assembly 물성만 payload로 등록한다.
 
 ### 8.3 실행 방법 (이 저장소 기준, 재현용)
 
@@ -290,3 +294,41 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 
 수집 후 첫 확인: real `tau_meas_*`가 유한값인지, 그리고 (2) 정지-check 잔차가
 plate 모델에서 작은지 → 크면 plate 질량/COM 보정 먼저, 그다음 (3) 마찰 fit.
+
+---
+
+## 9. 9/22 rich 데이터 분석: 중력보상 bias vs 마찰 (2026-09-29)
+
+`scripts/tools/split_gravity_bias_friction.py`로 real 14개 trial을 분석했다.
+식 `tau_cmd − (Mq̈ + Cq̇) = (g_true − g_franka) + F(q̇)`에서 bias는 q̇ 부호와
+무관하고 마찰은 q̇ 부호를 따르므로, 양방향 sweep 회귀로 둘을 분리한다.
+
+### 9.1 중력보상 bias → 원인: Desk EE 프로필
+
+| 관절 | 회귀 bias [Nm] (L/R) | settle Kp·e [Nm] | g_franka − g_model [Nm] | EE +0.6 kg 예측 Δg |
+|---|---|---|---|---|
+| J2 | 1.21 / 1.62 | 1.04 / 1.71 | −1.65 / −1.57 | −1.78 |
+| J4 | −2.51 / −2.46 | −2.51 / −2.69 | +3.06 / +3.07 | +2.78 |
+| J6 | −0.45 / −0.41 | 0 (stiction) | +0.48 / +0.48 | +0.55 |
+| J1/J3/J5/J7 | ≈ 0 | ≈ 0 | ≈ 0 | 0 |
+
+- position plot의 J4 +0.03 rad / J2 −0.015 rad 초기 오프셋은 PD가 이 bias와
+  평형을 이룬 것이다 (0.031 × 80 = 2.51 Nm).
+- 원인: 양팔 Desk의 활성 EE 프로필이 **"Franka Hand with default configuration"**
+  (≈0.73 kg)이었다. 실제는 plate 0.1324 kg → Franka가 ≈0.6 kg 과잉 중력보상.
+- 조치(2026-09-29): 양팔 Desk에 Generic Device `Plate` 프로필 생성·활성화
+  (mass 0.1324 kg, COM [0, 0, 0.0125] m, TCP [0, 0, 0.025] m,
+  I = diag(0.000223, 0.000223, 0.000433) kg m²).
+  setLoad로 plate를 중복 등록하지 않는다. Hand 재장착 시 Hand 프로필로 복귀.
+- 검증 기준: 재수집 데이터에서 q0_settle의 J4 `q − q0`가 ±0.005 rad 이내,
+  `E_c0` ≈ 0.
+
+### 9.2 관절 마찰 (bias 분리 후)
+
+- Coulomb `Fc` ≈ 0.6–1.4 Nm (J5가 가장 큼 1.2–1.4 Nm), 회귀 R² 0.81–0.97.
+- Isaac reach 학습은 dry friction 0.2 Nm 고정(DR 없음) → real이 3~7배.
+  재학습 시 friction DR 범위가 실측(0.6–1.4 Nm)을 포함해야 한다.
+- `Fv`, `Ja`는 속도/가속 범위가 좁아 신뢰도 낮음(일부 음수). armature는
+  J1 ≈ 0.14, 나머지 0.04–0.08로 MuJoCo/Isaac의 0.1과 차이 가능 → 추가 확인 필요.
+- real `tau_meas`와 MuJoCo(중력 off) 토크를 직접 비교하면 J2–J4에 Δg(q)가
+  섞인다. 토크 비교는 `tau_meas − g(q)` 또는 `tau_cmd_recon` 기준으로 한다.

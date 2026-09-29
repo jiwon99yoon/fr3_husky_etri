@@ -1,9 +1,10 @@
-# Effective inertials used by Isaac's dual_fr3_plate_ee.usd reach asset.
+# Legacy Isaac-asset reference, retained only to reproduce the old reach USD.
 #
-# Links 1-6 retain the standard MuJoCo FR3 values. The fixed hand inertial in
-# the source URDF was merged into link7 by the Isaac importer. The plate prim
-# itself has no mass/density. Link7 below is the final valid mass, COM,
-# principal-axis orientation and diagonal inertia read from that USD.
+# It is deliberately not loaded by dual_fr3.xml.xacro.  Its link7 value
+# (1.357143 kg) is effectively stock link7 plus the old 0.730 kg Franka hand,
+# while the physical plate assembly now modelled by this repository is a
+# separate 0.1324 kg fixed body under link8.  Do not use this file for real
+# hardware torque SysID or the plate MJCF.
 
 link1:
   origin:

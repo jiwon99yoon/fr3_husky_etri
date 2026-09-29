@@ -8,26 +8,29 @@
     </xacro:macro>
 
     <!--
-      Inserted directly into the FR3 link8 body. Both geoms have zero mass,
-      matching the current Isaac plate prim. The effective merged EE inertia
-      is applied to link7 through fr3_isaac_reach_inertials.yaml.
+      A fixed child of FR3 link8.  Keep the standard FR3 link7 inertia intact
+      and represent the measured physical plate assembly independently.  The
+      132.4 g assembly is approximated as a uniform 140 x 140 x 25 mm box.
     -->
     <xacro:macro name="plate_ee_mjcf" params="prefix">
-        <geom name="${prefix}_plate_ee_visual"
-              class="visual"
-              type="mesh"
-              mesh="plate_ee_140x140x25"
-              euler="0 0 ${3.0 * pi / 4.0}"
-              rgba="0.72 0.74 0.78 1.0"
-              mass="0" density="0"/>
-        <!-- Isaac uses a 140 x 140 x 25 mm box collider for this plate. -->
-        <geom name="${prefix}_plate_ee_collision"
-              class="collision"
-              type="box"
-              pos="0 0 0.0125"
-              euler="0 0 ${3.0 * pi / 4.0}"
-              size="0.07 0.07 0.0125"
-              mass="0" density="0"/>
-        <site name="${prefix}_plate_ee_tcp" pos="0 0 0.025"/>
+        <body name="${prefix}_plate_ee" euler="0 0 ${3.0 * pi / 4.0}">
+            <!-- COM at the geometric centre, measured from the flange face. -->
+            <inertial pos="0 0 0.0125"
+                      mass="0.1324"
+                      diaginertia="0.0002231492 0.0002231492 0.0004325067"/>
+            <geom name="${prefix}_plate_ee_visual"
+                  class="visual"
+                  type="mesh"
+                  mesh="plate_ee_140x140x25"
+                  rgba="0.72 0.74 0.78 1.0"
+                  mass="0" density="0"/>
+            <geom name="${prefix}_plate_ee_collision"
+                  class="collision"
+                  type="box"
+                  pos="0 0 0.0125"
+                  size="0.07 0.07 0.0125"
+                  mass="0" density="0"/>
+            <site name="${prefix}_plate_ee_tcp" pos="0 0 0.025"/>
+        </body>
     </xacro:macro>
 </mujoco>

@@ -69,14 +69,12 @@
     <xacro:arg name="fr3_dynamics_path"
                default="$(find franka_description)/mjcf/robots/fr3/dynamics.yaml" />
 
-    <!-- The reach launch uses hand=false. In that configuration use the
-         effective link7 inertia from Isaac's dual_fr3_plate_ee.usd. -->
+    <!-- Keep the factory FR3 link inertias for both hand configurations.
+         With hand=false, plate_ee_mjcf adds the measured plate inertia as a
+         fixed link8 child rather than replacing link7 with a hand-derived
+         effective inertia. -->
     <xacro:property name="standard_fr3_inertials"
                     value="${xacro.load_yaml('$(find franka_description)/mjcf/robots/fr3/inertials.yaml')}" />
-    <xacro:property name="isaac_reach_fr3_inertials"
-                    value="${xacro.load_yaml('$(find fr3_husky_description)/config/fr3_isaac_reach_inertials.yaml')}" />
-    <xacro:property name="fr3_arm_inertials"
-                    value="${standard_fr3_inertials if '$(arg hand)' == 'true' else isaac_reach_fr3_inertials}" />
 
     <xacro:property name="ee2cam_left_tf"
                     value="${xacro.load_yaml('$(find fr3_husky_description)/config/TF_ee2cam_left.yaml')}" />
@@ -96,7 +94,7 @@
             rpy="${rpy}"
             joint_limits="${xacro.load_yaml('$(find franka_description)/mjcf/robots/fr3/joint_limits.yaml')}"
             kinematics="${xacro.load_yaml('$(find franka_description)/mjcf/robots/fr3/kinematics.yaml')}"
-            inertials="${fr3_arm_inertials}"
+            inertials="${standard_fr3_inertials}"
             dynamics="${xacro.load_yaml('$(arg fr3_dynamics_path)')}"
             accelerometer_config="${xacro.load_yaml('$(find franka_description)/mjcf/robots/fr3/accelerometers.yaml')}"
             hand="$(arg hand)"

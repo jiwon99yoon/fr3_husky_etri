@@ -53,7 +53,7 @@ def generate_launch_description():
                 "sweep_mode": LaunchConfiguration("sweep_mode"),
                 "target_joint": LaunchConfiguration("target_joint"),
                 "command_rate_hz": LaunchConfiguration("command_rate_hz"),
-                "return_to_start_between_trials": "true",
+                "return_to_start_between_trials": True,
                 "home_position_tolerance_rad": LaunchConfiguration(
                     "home_position_tolerance_rad"
                 ),
