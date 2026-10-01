@@ -54,6 +54,7 @@ def generate_launch_description():
         parameters=[
             {
                 "joint_states_topic": LaunchConfiguration("joint_states_topic"),
+                "excitation_profile": LaunchConfiguration("excitation_profile"),
                 "sweep_mode": LaunchConfiguration("sweep_mode"),
                 "target_joint": LaunchConfiguration("target_joint"),
                 "command_rate_hz": LaunchConfiguration("command_rate_hz"),
@@ -100,6 +101,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "joint_states_topic", default_value="/dual_fr3/joint_states"
             ),
+            DeclareLaunchArgument("excitation_profile", default_value="rich"),
             # Default to one known, manually verified joint.  A full 14-joint
             # run must be selected explicitly after validating every q0 path.
             DeclareLaunchArgument("sweep_mode", default_value="false"),

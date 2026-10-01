@@ -56,6 +56,12 @@ def _finite_positive_list(value: object, name: str) -> list[float]:
 class FR3SysidNode(FR3ConsistencyProbeNode):
     """Collect one q0-referenced rich-excitation CSV per selected arm joint."""
 
+    # Tapered 0.5--2.0 Hz sine set: each component remains within the existing
+    # 0.40 rad/s and 5.0 rad/s^2 reference guards at the 100 Hz command rate.
+    _ARMATURE_SINE_FREQUENCIES_HZ = [0.5, 1.0, 1.5, 2.0]
+    _ARMATURE_SINE_AMPLITUDES_RAD = [0.080, 0.050, 0.035, 0.025]
+    _ARMATURE_SINE_CYCLES = 5
+
     def __init__(self):
         # A physical excitation must be opt-in.  The separate launch file also
         # exposes dry_run:=true by default, but this protects ``ros2 run``.
@@ -68,6 +74,7 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
         # The two identification stages.  Both default to enabled because the
         # experiment was designed to identify friction *and* acceleration
         # effects, not merely compare closed-loop position traces.
+        self.declare_parameter("excitation_profile", "rich")
         self.declare_parameter("do_friction_sweep", True)
         self.declare_parameter("friction_amplitude_rad", 0.15)
         self.declare_parameter("friction_speeds_rad_s", [0.05, 0.10, 0.15])
@@ -89,6 +96,12 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
         self.declare_parameter("max_live_excursion_rad", 0.20)
         self.declare_parameter("max_live_speed_rad_s", 0.40)
         self.declare_parameter("max_live_accel_rad_s2", 5.0)
+
+        self.excitation_profile = str(
+            self.get_parameter("excitation_profile").value
+        ).strip().lower()
+        if self.excitation_profile not in {"rich", "armature"}:
+            raise ValueError("excitation_profile must be 'rich' or 'armature'")
 
         self.do_friction = bool(self.get_parameter("do_friction_sweep").value)
         self.do_inertia = bool(self.get_parameter("do_inertia_sine").value)
@@ -113,6 +126,7 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
             self.get_parameter("inertia_frequencies_hz").value,
             "inertia_frequencies_hz",
         )
+        self.inertia_amplitudes: Optional[list[float]] = None
         self.inertia_cycles = int(self.get_parameter("inertia_cycles").value)
         if self.inertia_cycles <= 0:
             raise ValueError("inertia_cycles must be a positive integer")
@@ -121,6 +135,16 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
         self.wrist_scale = self._positive_scalar("wrist_excitation_scale")
         if self.wrist_scale > 1.0:
             raise ValueError("wrist_excitation_scale must be in (0, 1]")
+
+        if self.excitation_profile == "armature":
+            # Retain the cruise stage for Fc/B, then add a broader sine set
+            # for A. This is a fixed safe preset, not a previous fit result.
+            self.do_friction = True
+            self.do_inertia = True
+            self.inertia_frequencies = list(self._ARMATURE_SINE_FREQUENCIES_HZ)
+            self.inertia_amplitudes = list(self._ARMATURE_SINE_AMPLITUDES_RAD)
+            self.inertia_amplitude = max(self.inertia_amplitudes)
+            self.inertia_cycles = self._ARMATURE_SINE_CYCLES
 
         self.max_live_excursion = self._positive_scalar("max_live_excursion_rad")
         self.max_live_speed = self._positive_scalar("max_live_speed_rad_s")
@@ -136,7 +160,8 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
 
         self.get_logger().info(
             "SysID excitation ready: "
-            f"friction={self.do_friction}, inertia={self.do_inertia}, "
+            f"profile={self.excitation_profile}, friction={self.do_friction}, "
+            f"inertia={self.do_inertia}, "
             f"dry_run={self.dry_run}; normal-joint duration="
             f"{self._trajectories[1.0].duration:.1f} s"
         )
@@ -155,6 +180,9 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
         return value
 
     def _build_trajectory(self, scale: float) -> Trajectory:
+        inertia_amplitudes = None
+        if self.inertia_amplitudes is not None:
+            inertia_amplitudes = [amplitude * scale for amplitude in self.inertia_amplitudes]
         return build_trajectory(
             settle_s=self.q0_prehold_s,
             friction_amplitude=self.friction_amplitude * scale,
@@ -163,6 +191,7 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
             inertia_freqs=self.inertia_frequencies,
             inertia_cycles=self.inertia_cycles,
             dwell_s=max(self.friction_dwell_s, self.inertia_dwell_s),
+            inertia_amplitudes=inertia_amplitudes,
             friction_blend_s=self.friction_blend_s,
             friction_dwell_s=self.friction_dwell_s,
             inertia_dwell_s=self.inertia_dwell_s,
@@ -182,7 +211,7 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
         if self.do_friction:
             components.append(self.friction_amplitude * scale)
         if self.do_inertia:
-            components.append(self.inertia_amplitude * scale)
+            components.append(self._inertia_peak_amplitude(scale))
         return max(components)
 
     def _validate_live_trajectory(self):
@@ -193,7 +222,7 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
             # high-frequency parameter change cannot slip between samples.
             excursion = max(
                 self.friction_amplitude * scale if self.do_friction else 0.0,
-                self.inertia_amplitude * scale if self.do_inertia else 0.0,
+                self._inertia_peak_amplitude(scale) if self.do_inertia else 0.0,
             )
             if not self.dry_run and excursion > self.max_live_excursion:
                 raise ValueError(
@@ -212,6 +241,14 @@ class FR3SysidNode(FR3ConsistencyProbeNode):
                     "SysID reference acceleration exceeds max_live_accel_rad_s2 "
                     f"({accel:.3f} > {self.max_live_accel:.3f})"
                 )
+
+    def _inertia_peak_amplitude(self, scale: float) -> float:
+        peak = (
+            max(self.inertia_amplitudes)
+            if self.inertia_amplitudes is not None
+            else self.inertia_amplitude
+        )
+        return peak * scale
 
     # -------------------------------------------------------------- lifecycle
     def _warn_if_effort_is_missing(self):

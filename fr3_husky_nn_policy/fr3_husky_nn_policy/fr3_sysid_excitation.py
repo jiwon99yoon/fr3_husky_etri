@@ -247,11 +247,22 @@ def build_inertia_sine(
     freqs: list[float],
     cycles: int,
     dwell_s: float,
+    amplitudes: list[float] | None = None,
 ) -> list[Segment]:
-    """Hann-windowed sinusoids at each frequency (acceleration-rich)."""
+    """Hann-windowed sinusoids at each frequency (acceleration-rich).
+
+    ``amplitudes`` optionally supplies a separate position amplitude for each
+    frequency. That keeps high-frequency components informative for armature
+    identification without exceeding the hardware guards.
+    """
     segs: list[Segment] = []
-    a = abs(amplitude)
-    for f in freqs:
+    if amplitudes is None:
+        amplitude_list = [abs(amplitude)] * len(freqs)
+    else:
+        if len(amplitudes) != len(freqs):
+            raise ValueError("inertia amplitudes must match inertia frequencies")
+        amplitude_list = [abs(float(item)) for item in amplitudes]
+    for f, a in zip(freqs, amplitude_list):
         f = abs(f)
         if f <= 0.0 or a <= 0.0 or cycles <= 0:
             continue
@@ -271,6 +282,7 @@ def build_trajectory(
     inertia_freqs: list[float],
     inertia_cycles: int,
     dwell_s: float,
+    inertia_amplitudes: list[float] | None = None,
     friction_blend_s: float = 0.25,
     friction_dwell_s: float | None = None,
     inertia_dwell_s: float | None = None,
@@ -297,6 +309,7 @@ def build_trajectory(
             inertia_freqs,
             inertia_cycles,
             inertia_dwell_s,
+            amplitudes=inertia_amplitudes,
         )
     final_dwell_s = inertia_dwell_s if do_inertia else friction_dwell_s
     segs.append(Segment("hold", final_dwell_s, "q0_final", value=0.0))

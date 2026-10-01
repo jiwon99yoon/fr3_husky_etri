@@ -68,3 +68,23 @@ def test_friction_profile_rejects_no_cruise_interval():
             friction_blend_s=0.30,
             do_inertia=False,
         )
+
+
+def test_frequency_specific_inertia_amplitudes_are_bounded_and_labeled():
+    trajectory = build_trajectory(
+        settle_s=1.0,
+        friction_amplitude=0.15,
+        friction_speeds=[0.05, 0.10, 0.15],
+        inertia_amplitude=0.08,
+        inertia_amplitudes=[0.08, 0.05, 0.035, 0.025],
+        inertia_freqs=[0.5, 1.0, 1.5, 2.0],
+        inertia_cycles=5,
+        dwell_s=0.4,
+        friction_blend_s=0.30,
+    )
+
+    phases = [segment.phase for segment in trajectory.segments]
+    assert "inertia_sine_f2.00" in phases
+    assert trajectory.peak_displacement() <= 0.150001
+    assert trajectory.speed_upper_bound() <= 0.400001
+    assert trajectory.accel_upper_bound() <= 5.000001

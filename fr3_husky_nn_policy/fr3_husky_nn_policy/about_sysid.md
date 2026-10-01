@@ -295,6 +295,54 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 수집 후 첫 확인: real `tau_meas_*`가 유한값인지, 그리고 (2) 정지-check 잔차가
 plate 모델에서 작은지 → 크면 plate 질량/COM 보정 먼저, 그다음 (3) 마찰 fit.
 
+### 8.5 Armature 식별용 acceleration-rich profile
+
+기존 rich profile의 0.5/1.0 Hz sine만으로는 `A*qdd` 항이 하한에 붙을 수 있다.
+`fr3_armature_sysid.launch.py`는 기존 양방향 cruise (`Fc`, `B`)를 유지하면서,
+주파수별 진폭을 줄인 0.5/1.0/1.5/2.0 Hz sine을 추가한다. 일반 관절의 reference
+상한은 `|qdot_ref| <= 0.363 rad/s`, `|qdd_ref| <= 4.817 rad/s^2`로, 기존 live
+guard (`0.4 rad/s`, `5.0 rad/s^2`) 안이다. Wrist는 기존과 같이 0.5배 축소한다.
+
+먼저 한 관절(`target_joint`는 0-based index)에서 dry preview와 MuJoCo 실행을
+확인한 뒤 실로봇으로 진행한다. `dry_run:=true`에서는 probe가 CSV만 기록하고
+motion command를 보내지 않는다.
+
+~~~bash
+# 1) real controller 연결 상태에서 profile/limit/q0/CSV schema만 확인
+ros2 launch fr3_husky_nn_policy fr3_armature_sysid.launch.py \
+  target_joint:=5 dry_run:=true launch_move_group:=true
+ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
+
+# 2) MuJoCo에서 동일 controller/reference forward run 확인
+ros2 launch fr3_husky_nn_policy fr3_armature_sysid.launch.py \
+  target_joint:=5 use_mujoco:=true dry_run:=false launch_move_group:=true
+ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
+
+# 3) collision-free q0를 수동 확인한 한 관절에서만 real data 수집
+ros2 launch fr3_husky_nn_policy fr3_armature_sysid.launch.py \
+  target_joint:=5 dry_run:=false launch_move_group:=true
+ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
+
+# 4) 위 결과가 안전하고 정상일 때만 14관절 sweep
+ros2 launch fr3_husky_nn_policy fr3_armature_sysid.launch.py \
+  sweep_mode:=true dry_run:=false launch_move_group:=true
+ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
+~~~
+
+로그는 기존 `sysid_raw`와 섞지 않고 `data/sysid_armature/{real,mujoco}`에 저장된다.
+수집 후에는 0.5/1.0 Hz와 cruise 0.05/0.10을 fit에 쓰고, 1.5/2.0 Hz와 cruise
+0.15를 미사용 검증 구간으로 남긴다.
+
+~~~bash
+/home/dyros/anaconda3/envs/cRobotics/bin/python \
+  scripts/tools/fit_sysid_passive_parameters.py \
+  --mjcf /tmp/dual_fr3_plate_nocam.xml \
+  --csv 'data/sysid_armature/real/*.csv' \
+  --train-sine-hz 0.5 1.0 \
+  --held-sine-hz 1.5 2.0 \
+  --output-dir data/sysid_armature_fit_YYMMDD
+~~~
+
 ---
 
 ## 9. 9/22 rich 데이터 분석: 중력보상 bias vs 마찰 (2026-09-29)
