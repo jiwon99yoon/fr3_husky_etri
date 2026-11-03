@@ -1,0 +1,216 @@
+policy: /home/dyros/etri_ws/src/fr3_husky_etri/model/dual_fr3_boxlift_pregrasp_box410_model2999.npz
+provenance:
+  experiment_name: dual_fr3_plate_lift_sim2real_100hz_light_pregrasp
+  run_name: pregrasp_box410
+  iteration: 2999
+frame: 'robot base (training root): arm mounting plate, midpoint of the two arm bases; x forward, y left, z up'
+floor_z_base_m: -0.405
+box_size_m:
+- 0.41
+- 0.31
+- 0.28
+training_noise:
+  box_pos_m: 0.01
+  box_yaw_rad: 0.05
+  joint_rad: 0.01
+joint_order:
+- left_fr3_joint1
+- left_fr3_joint2
+- left_fr3_joint3
+- left_fr3_joint4
+- left_fr3_joint5
+- left_fr3_joint6
+- left_fr3_joint7
+- right_fr3_joint1
+- right_fr3_joint2
+- right_fr3_joint3
+- right_fr3_joint4
+- right_fr3_joint5
+- right_fr3_joint6
+- right_fr3_joint7
+poses:
+- requested_box:
+    x: 0.46
+    y: 0.0
+    yaw_deg: 0.0
+  table_row: 1919
+  box_center_base:
+    x: 0.4598
+    y: -0.0005
+    z: -0.265
+    yaw_deg: 0.04
+  box_placement:
+    robot_side_face_x_m: 0.2548
+    far_face_x_m: 0.6648
+    left_face_y_m: 0.1545
+    right_face_y_m: -0.1555
+  distance_to_request:
+    xy_m: 0.0005
+    yaw_deg: 0.04
+  min_joint_margin_rad: 0.106
+  left_target_positions:
+  - -0.0741
+  - 1.6246
+  - -0.2056
+  - -1.3818
+  - -1.0845
+  - 1.6946
+  - 0.8721
+  right_target_positions:
+  - 0.0759
+  - 1.6278
+  - 0.2027
+  - -1.3784
+  - 1.0821
+  - 1.6903
+  - 0.7089
+  move_to_joint: ros2 run fr3_husky_task_manager move_to_joint --left-target-positions -0.0741 1.6246 -0.2056 -1.3818 -1.0845 1.6946 0.8721 --right-target-positions 0.0759 1.6278 0.2027 -1.3784 1.0821 1.6903
+    0.7089
+- requested_box:
+    x: 0.48
+    y: 0.0
+    yaw_deg: 0.0
+  table_row: 3788
+  box_center_base:
+    x: 0.4768
+    y: 0.0001
+    z: -0.265
+    yaw_deg: -0.03
+  box_placement:
+    robot_side_face_x_m: 0.2718
+    far_face_x_m: 0.6818
+    left_face_y_m: 0.1551
+    right_face_y_m: -0.1549
+  distance_to_request:
+    xy_m: 0.0032
+    yaw_deg: -0.03
+  min_joint_margin_rad: 0.083
+  left_target_positions:
+  - -0.0892
+  - 1.6507
+  - -0.2084
+  - -1.317
+  - -1.0874
+  - 1.6777
+  - 0.7852
+  right_target_positions:
+  - 0.0884
+  - 1.6461
+  - 0.209
+  - -1.3172
+  - 1.0877
+  - 1.6789
+  - 0.7826
+  move_to_joint: ros2 run fr3_husky_task_manager move_to_joint --left-target-positions -0.0892 1.6507 -0.2084 -1.317 -1.0874 1.6777 0.7852 --right-target-positions 0.0884 1.6461 0.209 -1.3172 1.0877 1.6789
+    0.7826
+- requested_box:
+    x: 0.5
+    y: 0.0
+    yaw_deg: 0.0
+  table_row: 3925
+  box_center_base:
+    x: 0.4984
+    y: -0.0025
+    z: -0.265
+    yaw_deg: -0.32
+  box_placement:
+    robot_side_face_x_m: 0.2934
+    far_face_x_m: 0.7034
+    left_face_y_m: 0.1525
+    right_face_y_m: -0.1575
+  distance_to_request:
+    xy_m: 0.0029
+    yaw_deg: -0.32
+  min_joint_margin_rad: 0.052
+  left_target_positions:
+  - -0.1061
+  - 1.6813
+  - -0.2238
+  - -1.2225
+  - -1.0799
+  - 1.6646
+  - 0.7973
+  right_target_positions:
+  - 0.092
+  - 1.6755
+  - 0.2237
+  - -1.2327
+  - 1.0804
+  - 1.6675
+  - 0.745
+  move_to_joint: ros2 run fr3_husky_task_manager move_to_joint --left-target-positions -0.1061 1.6813 -0.2238 -1.2225 -1.0799 1.6646 0.7973 --right-target-positions 0.092 1.6755 0.2237 -1.2327 1.0804 1.6675
+    0.745
+- requested_box:
+    x: 0.48
+    y: 0.05
+    yaw_deg: 0.0
+  table_row: 720
+  box_center_base:
+    x: 0.4787
+    y: 0.0517
+    z: -0.265
+    yaw_deg: -0.04
+  box_placement:
+    robot_side_face_x_m: 0.2737
+    far_face_x_m: 0.6837
+    left_face_y_m: 0.2067
+    right_face_y_m: -0.1033
+  distance_to_request:
+    xy_m: 0.0021
+    yaw_deg: -0.04
+  min_joint_margin_rad: 0.066
+  left_target_positions:
+  - -0.0047
+  - 1.668
+  - -0.1967
+  - -1.248
+  - -1.008
+  - 1.6223
+  - 0.8554
+  right_target_positions:
+  - 0.1696
+  - 1.6431
+  - 0.2345
+  - -1.3437
+  - 1.1591
+  - 1.7299
+  - 0.6958
+  move_to_joint: ros2 run fr3_husky_task_manager move_to_joint --left-target-positions -0.0047 1.668 -0.1967 -1.248 -1.008 1.6223 0.8554 --right-target-positions 0.1696 1.6431 0.2345 -1.3437 1.1591 1.7299
+    0.6958
+- requested_box:
+    x: 0.48
+    y: -0.05
+    yaw_deg: 0.0
+  table_row: 2228
+  box_center_base:
+    x: 0.4811
+    y: -0.0509
+    z: -0.265
+    yaw_deg: 0.32
+  box_placement:
+    robot_side_face_x_m: 0.2761
+    far_face_x_m: 0.6861
+    left_face_y_m: 0.1041
+    right_face_y_m: -0.2059
+  distance_to_request:
+    xy_m: 0.0015
+    yaw_deg: 0.32
+  min_joint_margin_rad: 0.061
+  left_target_positions:
+  - -0.1686
+  - 1.6435
+  - -0.2317
+  - -1.3432
+  - -1.1705
+  - 1.7297
+  - 0.7869
+  right_target_positions:
+  - 0.0095
+  - 1.6732
+  - 0.1953
+  - -1.2286
+  - 1.0038
+  - 1.6137
+  - 0.7589
+  move_to_joint: ros2 run fr3_husky_task_manager move_to_joint --left-target-positions -0.1686 1.6435 -0.2317 -1.3432 -1.1705 1.7297 0.7869 --right-target-positions 0.0095 1.6732 0.1953 -1.2286 1.0038 1.6137
+    0.7589

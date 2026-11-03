@@ -1,0 +1,77 @@
+ppo_boxlift_policy_node:
+  ros__parameters:
+    # NPZ from dual_fr3_lab/scripts/tools/export_boxlift_actor.py (weights + manifest_json).
+    # Box size, default pose, joint-target limits, action scale/clip, reference mode, goal/start ranges
+    # and the policy rate are read from the manifest, not from this file.
+    model_path: ""
+
+    # Physical box on the robot, (x, y, z) in metres: x = 410 mm edge, y = 310 mm edge squeezed by
+    # the plates, z = height. The node refuses a checkpoint whose trained box size (incl. size
+    # randomization) does not cover this box +/- box_size_tolerance_m.
+    box_size_m: [0.410, 0.310, 0.280]
+    box_size_tolerance_m: 0.005
+
+    joint_states_topic: /dual_fr3/joint_states
+    # Placeholder until the vision node is integrated: PoseStamped of the BOX CENTER (not the marker),
+    # in base_frame or any frame with a TF to it.
+    box_pose_topic: /box_pose
+    base_frame: base
+    command_topic: /policy_joint_command
+    control_action: /fr3_policy_control
+
+    # Lift height of the box center in base_frame. Must lie in the manifest goal z range
+    # (training: 0.15 - 0.35 m). The goal x/y is latched from the box position at start_policy.
+    goal_z_m: 0.15
+
+    joint_state_timeout_s: 0.15
+    # Longer than one vision frame; a stale box pose while RUNNING is a fault (stop -> box drops).
+    box_pose_timeout_s: 0.30
+    command_timeout_s: 0.15
+    # 0 = run until stop_policy (v1). Training episodes are 5 s; the node warns once past that.
+    max_duration_s: 0.0
+
+    # Controller-side check (policy_control_action_server.cpp validateTarget): reject any absolute
+    # target with |q_target - q_measured_at_receipt| > this, which aborts the whole goal.
+    #
+    # Why 0.20 and not the Reach default 0.11 (decided 2026-11-03):
+    # - Box-lift is trained with reference_mode=policy_step, so the node sends ABSOLUTE targets
+    #   q_target = q_obs + delta with |delta| <= 0.1 rad (tanh * 0.1, clip 0.1). The node-side
+    #   check on delta is kept and always passes.
+    # - The controller compares against q measured when the command ARRIVES, not q_obs. During the
+    #   latency (joint_states age + inference + DDS) the arm keeps moving, so the checked value is
+    #   |delta + (q_obs - q_now)|. With 0.11 only 0.01 rad of margin is left (10 ms at 1 rad/s).
+    # - Isaac trace of model_7498 (data/boxlift_obs_parity_261103): the policy uses nearly the full
+    #   delta (median 0.097 rad) and joints reach 1.97 rad/s. Steps over 0.11: 0.1 % at 20 ms
+    #   latency, 1.3 % at 30 ms, 5.1 % at 50 ms. One violation aborts the goal, the controller then
+    #   holds the measured q, the squeeze is lost and the box drops.
+    # - 0.20 = 0.1 (max delta) + 2 rad/s * 50 ms (worst joint speed x one policy period of latency).
+    # - Reach in physics_step mode sends relative offsets; the controller then checks |offset| <= 0.1,
+    #   so this issue never shows up there.
+    # Re-check with the new-box checkpoint and the real latency logged in trace.csv.
+    max_policy_target_delta_rad: 0.20
+
+    # Start gating: start_policy is refused unless the state is inside the start distribution the
+    # checkpoint trained on. Which one is read from the manifest (start.mode):
+    # - ready_pose: arms within ready_tolerance_rad of the default pose; box x/y/yaw inside the trained
+    #   start range widened by start_position_margin_m / start_yaw_margin_rad.
+    # - pregrasp_table (-Pregrasp tasks): training reset the arms to one row of the pre-grasp table
+    #   (+/- joint noise 0.01 rad) and the box to that row's pose (+/- 1 cm, +/- 0.05 rad). Accepted only
+    #   if one row matches both: every joint within joint noise + pregrasp_joint_margin_rad, box x/y
+    #   within position noise + start_position_margin_m, yaw within yaw noise + start_yaw_margin_rad.
+    #   ready_tolerance_rad is not used. The table is embedded in the NPZ; move the arms to a row with
+    #   MoveIt (start_poses yaml from pregrasp_start_poses.py) before placing the box.
+    # - both: box center z within rest_z_tolerance_m of the trained resting height.
+    # Note: sim base height 0.405 m vs real URDF 0.392 m -> a resting box reads ~1.3 cm higher on
+    # the real robot than in training.
+    ready_tolerance_rad: 0.20
+    pregrasp_joint_margin_rad: 0.02
+    start_position_margin_m: 0.0
+    start_yaw_margin_rad: 0.0
+    rest_z_tolerance_m: 0.03
+
+    # true: start_policy runs inference and logging only, nothing is published to the controller.
+    shadow_mode: true
+
+    # Empty = <repo>/data. One directory per session: metadata.json + trace.csv.
+    log_root: ""
+    log_task_name: dual_fr3_boxlift

@@ -1,0 +1,177 @@
+{
+  "generated_utc": "2026-11-02T15:58:30.219931+00:00",
+  "trace": "/home/dyros/etri_ws/src/fr3_husky_etri/data/boxlift_obs_parity_261103/trace.npz",
+  "actor": "/home/dyros/etri_ws/src/fr3_husky_etri/data/boxlift_obs_parity_261103/actor.npz",
+  "task": "Isaac-Lift-Box-DualFR3-Plate-Sim2Real-100Hz-Light-Margin-Play-v0",
+  "checkpoint": "/home/dyros/dual_fr3_lab/logs/rsl_rl/dual_fr3_plate_lift_sim2real_100hz_light/2026-11-03_00-14-53_margin005_from5999/model_7498.pt",
+  "checkpoint_sha256": "309c9d1799d9ecc8a7629b788f1da65f6bdc0ce63078f143395ab951dd6dd5b8",
+  "physics_dt": 0.01,
+  "decimation": 5,
+  "all_pass": true,
+  "checks": {
+    "arm_joint_order": {
+      "pass": true,
+      "detail": "left_fr3_joint1, left_fr3_joint2, left_fr3_joint3, left_fr3_joint4, left_fr3_joint5, left_fr3_joint6, left_fr3_joint7, right_fr3_joint1, right_fr3_joint2, right_fr3_joint3, right_fr3_joint4, right_fr3_joint5, right_fr3_joint6, right_fr3_joint7"
+    },
+    "default_pose": {
+      "max_abs_err": 5.321502682953394e-08,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "target_limits": {
+      "max_abs_err": 1.2817382799568122e-07,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "action_scale": {
+      "max_abs_err": 0.0,
+      "tol": 1e-09,
+      "pass": true,
+      "detail": "clip cfg = {'.*': (-0.1, 0.1)}; reference_mode = policy_step"
+    },
+    "obs_term_layout": {
+      "pass": true,
+      "detail": "[('joint_pos', 14), ('joint_vel', 14), ('object_position', 3), ('target_object_position', 7), ('actions', 14), ('object_orientation', 4)]"
+    },
+    "sim_goal_resampled_within_episode": {
+      "pass": true,
+      "detail": "16/3200 samples, at episode steps [99] (excluded from goal/actor checks)"
+    },
+    "obs.joint_pos": {
+      "max_abs_err": 1.3694763190130743e-07,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "obs.joint_vel": {
+      "max_abs_err": 0.0,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "obs.object_position": {
+      "max_abs_err": 1.6080277132068943e-07,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "obs.target_object_position": {
+      "max_abs_err": 0.0,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "obs.actions": {
+      "max_abs_err": 0.0,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "obs.object_orientation": {
+      "max_abs_err": 2.98023181244389e-07,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "command.goal_quat_is_identity_xyzw": {
+      "max_abs_err": 0.0,
+      "tol": 1e-06,
+      "pass": true,
+      "detail": ""
+    },
+    "prev_action_buffer_vs_node": {
+      "max_abs_err": 0.0,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "actor.isaac_obs": {
+      "max_abs_err": 1.1920928955078125e-06,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": "sha256 309c9d1799d9 vs trace 309c9d1799d9"
+    },
+    "actor.rebuilt_obs": {
+      "max_abs_err": 2.0563602447509766e-06,
+      "tol": 0.0001,
+      "pass": true,
+      "detail": ""
+    },
+    "actor.sha256_matches_checkpoint": {
+      "pass": true
+    },
+    "held_target": {
+      "max_abs_err": 1.1920928955078125e-07,
+      "tol": 1e-05,
+      "pass": true,
+      "detail": ""
+    }
+  },
+  "stats": {
+    "steps_x_envs": [
+      200,
+      16
+    ],
+    "root_height_w_m": [
+      0.40499991178512573,
+      0.4050000011920929
+    ],
+    "box_start_pos_b_min": [
+      0.4519,
+      -0.0978,
+      -0.245
+    ],
+    "box_start_pos_b_max": [
+      0.595,
+      0.0777,
+      -0.245
+    ],
+    "box_start_yaw_deg": [
+      -5.57373316814362,
+      5.6404208438831
+    ],
+    "box_pos_b_min": [
+      0.4259,
+      -0.1132,
+      -0.2675
+    ],
+    "box_pos_b_max": [
+      0.675,
+      0.1334,
+      0.2926
+    ],
+    "goal_z_range": [
+      0.1500338762998581,
+      0.34665584564208984
+    ],
+    "action_saturated_frac(|a|>0.99)": 0.014732142857142857,
+    "max_abs_delta_rad": 0.09985643029212952,
+    "target_clipped_by_limits_frac": 0.01497767857142857,
+    "max_abs_joint_vel_rad_s": 1.972983717918396,
+    "frac_steps_where_|delta - qd*0.03|>0.11": 0.0010267857142857142,
+    "sensitivity": {
+      "goal_quat_wxyz_(1,0,0,0)": {
+        "mean_abs_action_change": 0.2993529140949249,
+        "max_abs_action_change": 1.836142897605896,
+        "max_abs_delta_q_change_rad": 0.1836142897605896
+      },
+      "box_quat_yaw_flipped_180deg": {
+        "mean_abs_action_change": 0.4183115065097809,
+        "max_abs_action_change": 1.893890619277954,
+        "max_abs_delta_q_change_rad": 0.18938906192779542
+      },
+      "box_z_+0.013m_(base_height_0.392)": {
+        "mean_abs_action_change": 0.020195627585053444,
+        "max_abs_action_change": 0.18406876921653748,
+        "max_abs_delta_q_change_rad": 0.01840687692165375
+      },
+      "box_xy_+0.01m_(1sigma_noise)": {
+        "mean_abs_action_change": 0.009102484211325645,
+        "max_abs_action_change": 0.0971933901309967,
+        "max_abs_delta_q_change_rad": 0.009719339013099671
+      }
+    }
+  }
+}
