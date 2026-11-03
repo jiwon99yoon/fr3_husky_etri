@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dual-FR3 static gravity validation</title>
+<style>
+  body { font-family: Arial, sans-serif; color: #1f2933; margin: 0; background: #f7f9fb; }
+  main { max-width: 1220px; margin: 0 auto; padding: 32px 24px 48px; }
+  h1, h2 { color: #102a43; }
+  .card { background: white; border: 1px solid #d9e2ec; border-radius: 8px; padding: 20px; margin: 18px 0; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .metric { background: #eef5fb; padding: 14px; border-radius: 6px; }
+  .metric strong { display: block; font-size: 1.4rem; color: #0b4f71; margin-top: 4px; }
+  img { width: 100%; height: auto; border: 1px solid #d9e2ec; margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { border-bottom: 1px solid #d9e2ec; padding: 8px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background: #102a43; color: white; }
+  .scroll { overflow-x: auto; }
+  code { background: #edf2f7; padding: 2px 4px; border-radius: 3px; }
+</style>
+</head>
+<body><main>
+<h1>Dual-FR3 static gravity validation</h1>
+<p>Real SysID logs versus gravity-on MuJoCo inverse dynamics. Generated 2026-09-30 15:13 UTC.</p>
+<section class="card summary">
+  <div class="metric">Stationary samples<strong>215,901</strong></div>
+  <div class="metric">Velocity threshold<strong>0.010 rad/s</strong></div>
+  <div class="metric">Largest |mean residual|<strong>right_fr3_joint4: 0.646 Nm</strong></div>
+</section>
+<section class="card"><h2>Interpretation</h2>
+<p>For stationary samples, the test evaluates <code>tau_meas ≈ g_MJ(q)</code>. MuJoCo contact is disabled and passive terms are zeroed. This checks payload, gravity direction, and joint mapping. It does not validate friction, damping, armature, delay, or contact dynamics.</p>
+</section>
+<section class="card"><h2>Mean torque comparison</h2><img src="static_gravity_mean_comparison.png" alt="Mean measured and gravity torque comparison"></section>
+<section class="card"><h2>Residual distribution</h2><img src="static_gravity_residual_distribution.png" alt="Residual distribution by joint"></section>
+<section class="card"><h2>Measured torque versus gravity torque</h2><img src="static_gravity_scatter.png" alt="Stationary measured torque versus gravity scatter plots"></section>
+<section class="card"><h2>Joint summary</h2><div class="scroll"><table><thead><tr>
+<th>Joint</th><th>Samples</th><th>Mean measured torque (Nm)</th><th>Mean MuJoCo gravity (Nm)</th><th>Mean residual (Nm)</th><th>Residual std (Nm)</th><th>5–95% residual (Nm)</th>
+</tr></thead><tbody><tr><td>left_fr3_joint1</td><td>215,901</td><td>-0.116</td><td>0.000</td><td>-0.116</td><td>0.084</td><td>[-0.162, -0.051]</td></tr>
+<tr><td>left_fr3_joint2</td><td>215,901</td><td>-2.318</td><td>-2.145</td><td>-0.173</td><td>0.072</td><td>[-0.237, -0.065]</td></tr>
+<tr><td>left_fr3_joint3</td><td>215,901</td><td>-0.736</td><td>-0.694</td><td>-0.042</td><td>0.148</td><td>[-0.301, 0.062]</td></tr>
+<tr><td>left_fr3_joint4</td><td>215,901</td><td>20.063</td><td>19.585</td><td>+0.478</td><td>0.151</td><td>[0.354, 0.788]</td></tr>
+<tr><td>left_fr3_joint5</td><td>215,901</td><td>0.813</td><td>0.790</td><td>+0.024</td><td>0.123</td><td>[-0.039, 0.055]</td></tr>
+<tr><td>left_fr3_joint6</td><td>215,901</td><td>1.687</td><td>1.694</td><td>-0.007</td><td>0.119</td><td>[-0.097, 0.153]</td></tr>
+<tr><td>left_fr3_joint7</td><td>215,901</td><td>-0.072</td><td>0.000</td><td>-0.072</td><td>0.086</td><td>[-0.129, -0.017]</td></tr>
+<tr><td>right_fr3_joint1</td><td>215,901</td><td>0.088</td><td>0.000</td><td>+0.088</td><td>0.129</td><td>[-0.060, 0.234]</td></tr>
+<tr><td>right_fr3_joint2</td><td>215,901</td><td>-1.909</td><td>-2.105</td><td>+0.197</td><td>0.099</td><td>[0.048, 0.301]</td></tr>
+<tr><td>right_fr3_joint3</td><td>215,901</td><td>-0.497</td><td>-0.608</td><td>+0.111</td><td>0.144</td><td>[-0.005, 0.265]</td></tr>
+<tr><td>right_fr3_joint4</td><td>215,901</td><td>20.222</td><td>19.575</td><td>+0.646</td><td>0.084</td><td>[0.516, 0.761]</td></tr>
+<tr><td>right_fr3_joint5</td><td>215,901</td><td>0.683</td><td>0.796</td><td>-0.113</td><td>0.191</td><td>[-0.183, 0.006]</td></tr>
+<tr><td>right_fr3_joint6</td><td>215,901</td><td>1.826</td><td>1.697</td><td>+0.129</td><td>0.095</td><td>[-0.042, 0.174]</td></tr>
+<tr><td>right_fr3_joint7</td><td>215,901</td><td>-0.016</td><td>0.000</td><td>-0.016</td><td>0.117</td><td>[-0.058, 0.021]</td></tr></tbody></table></div></section>
+<section class="card"><h2>Reproduction inputs</h2>
+<p>MJCF: <code>/tmp/dual_fr3_plate_260929.xml</code></p>
+<p>CSV pattern: <code>data/sysid_raw/real/*.csv</code></p>
+<p><a href="static_gravity_summary.csv">Download joint summary CSV</a> · <a href="report.md">Open Markdown report</a> · <a href="validation_manifest.json">Open manifest</a></p>
+</section>
+</main></body></html>

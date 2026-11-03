@@ -1,0 +1,27 @@
+{
+  "generated_utc": "2026-09-30 15:13 UTC",
+  "mjcf": "/tmp/dual_fr3_plate_260929.xml",
+  "csv_pattern": "data/sysid_raw/real/*.csv",
+  "input_csvs": [
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint1_sysid_rich_260929_165457.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint2_sysid_rich_260929_165540.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint3_sysid_rich_260929_165622.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint4_sysid_rich_260929_165704.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint5_sysid_rich_260929_165747.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint6_sysid_rich_260929_165818.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/left_fr3_joint7_sysid_rich_260929_165850.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint1_sysid_rich_260929_165921.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint2_sysid_rich_260929_170003.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint3_sysid_rich_260929_170046.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint4_sysid_rich_260929_170128.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint5_sysid_rich_260929_170210.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint6_sysid_rich_260929_170242.csv",
+    "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_raw/real/right_fr3_joint7_sysid_rich_260929_170313.csv"
+  ],
+  "output_dir": "/home/dyros/etri_ws/src/fr3_husky_etri/data/sysid_validation_260929",
+  "stationary_qd_rad_s": 0.01,
+  "gravity_m_s2": -9.81,
+  "stationary_rows": 215901,
+  "passive_terms": "zeroed: dof_damping, dof_frictionloss, dof_armature",
+  "contact": "disabled for mj_inverse"
+}
