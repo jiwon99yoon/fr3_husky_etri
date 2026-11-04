@@ -185,6 +185,7 @@ def _launch_setup(context, *args, **kwargs):
     mujoco_scene_extra_args        = LaunchConfiguration('mujoco_scene_extra_args').perform(context).strip()
     mujoco_initial_joint_positions = LaunchConfiguration('mujoco_initial_joint_positions').perform(context).strip()
     mujoco_object_pose_body        = LaunchConfiguration('mujoco_object_pose_body').perform(context).strip()
+    mujoco_object_pose_topic       = LaunchConfiguration('mujoco_object_pose_topic').perform(context).strip()
 
     if not robot_sides:
         raise RuntimeError("robot_side must be 'left', 'right', or 'dual'.")
@@ -206,7 +207,7 @@ def _launch_setup(context, *args, **kwargs):
         mjcf_path = os.path.join(pkg_desc, 'mjcf', 'dual_fr3.xml.xacro')
         xacro_mappings = {
             'ros2_control': 'true', 'with_sc': 'false', 'fix_finger': 'false',
-            'hand': load_gripper, 'mobile': load_mobile,
+            'hand': load_gripper, 'mobile': load_mobile, 'with_realsense': with_realsense,
             'use_mujoco': use_mujoco, 'use_fake_hardware': use_fake_hardware,
             'fake_sensor_commands': fake_sensor_commands,
         }
@@ -274,7 +275,7 @@ def _launch_setup(context, *args, **kwargs):
             cm_params.append({
                 'mujoco_object_pose_body': mujoco_object_pose_body,
                 'mujoco_object_pose_frame': 'base',
-                'mujoco_object_pose_topic': '/box_pose',
+                'mujoco_object_pose_topic': mujoco_object_pose_topic,
                 'mujoco_object_pose_rate': 30.0,
             })
     controller_prefix = 'taskset -c 2,3' if use_mujoco.lower() == 'false' else None
@@ -398,8 +399,8 @@ def _launch_setup(context, *args, **kwargs):
             urdf_mg_path = os.path.join(pkg_desc, 'robots', 'dual_fr3.urdf.xacro')
             srdf_path    = os.path.join(pkg_desc, 'robots', 'dual_fr3.srdf.xacro')
             urdf_mg_map  = {'ros2_control': 'false', 'with_sc': 'false', 'fix_finger': 'false',
-                            'hand': load_gripper, 'mobile': load_mobile}
-            srdf_map     = {'hand': load_gripper, 'mobile': load_mobile}
+                            'hand': load_gripper, 'mobile': load_mobile, 'with_realsense': with_realsense}
+            srdf_map     = {'hand': load_gripper, 'mobile': load_mobile, 'with_realsense': with_realsense}
             cfg_sub      = 'dual'
             ctrl_yaml    = os.path.join('config', 'dual', 'dual_fr3_controllers.yaml')
             jsp_src      = ['dual_fr3/joint_states']
@@ -530,7 +531,7 @@ def generate_launch_description():
         DeclareLaunchArgument('namespace',         default_value='',      description='Namespace for the robot'),
         DeclareLaunchArgument('load_gripper',      default_value='true',  description='Load gripper (true/false)'),
         DeclareLaunchArgument('load_mobile',       default_value='false', description='Load mobile base (true/false)'),
-        DeclareLaunchArgument('with_realsense',    default_value='true',  description='Attach RealSense D435i to each EE in the MuJoCo model (true/false)'),
+        DeclareLaunchArgument('with_realsense',    default_value='true',  description='Attach RealSense D435i to each EE (dual: URDF, SRDF and MuJoCo model; single: MuJoCo model)'),
         DeclareLaunchArgument('use_mujoco',        default_value='false', description='Use MuJoCo hardware interface'),
         DeclareLaunchArgument('use_fake_hardware', default_value='false', description='Use fake hardware'),
         DeclareLaunchArgument('fake_sensor_commands', default_value='false', description='Fake sensor commands'),
@@ -545,6 +546,8 @@ def generate_launch_description():
         DeclareLaunchArgument('mujoco_initial_joint_positions', default_value='',
                               description='MuJoCo start pose: 7 arm joint values per side (left then right), empty = default'),
         DeclareLaunchArgument('mujoco_object_pose_body', default_value='',
-                              description='MuJoCo body whose pose in base is published on /box_pose (empty = off)'),
+                              description='MuJoCo body whose pose in base is published on mujoco_object_pose_topic (empty = off)'),
+        DeclareLaunchArgument('mujoco_object_pose_topic', default_value='/box_pose',
+                              description='topic of the MuJoCo object pose (PoseStamped in base)'),
         OpaqueFunction(function=_launch_setup),
     ])

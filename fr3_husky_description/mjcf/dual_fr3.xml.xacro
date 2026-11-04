@@ -62,14 +62,27 @@
     <xacro:arg name="gravity_z" default="0"/>
     <xacro:arg name="mobile_mount_z" default="0.26"/>
     <xacro:arg name="with_box" default="false"/>
+    <!-- Reach target spheres (/reach_target_pose); box-lift turns them off. -->
+    <xacro:arg name="reach_markers" default="true"/>
     <xacro:arg name="box_x" default="0.485"/>
     <xacro:arg name="box_y" default="0.0"/>
     <xacro:arg name="box_yaw" default="0.0"/>
+    <!-- full box edges (x front-back, y squeezed by the plates, z height) -->
+    <xacro:arg name="box_size_x" default="0.410"/>
+    <xacro:arg name="box_size_y" default="0.310"/>
+    <xacro:arg name="box_size_z" default="0.280"/>
+    <!-- box-lift goal (box center in base, identity orientation), drawn as a ghost box -->
+    <xacro:arg name="goal_z" default="0.15"/>
+    <xacro:arg name="goal_dx" default="0.0"/>
+    <xacro:arg name="goal_dy" default="0.0"/>
     <xacro:arg name="box_mass" default="0.5"/>
     <xacro:arg name="box_friction" default="0.8"/>
     <xacro:arg name="box_condim" default="4"/>
     <xacro:arg name="plate_friction" default="1"/>
     <xacro:arg name="contact_timeconst" default="0.02"/>
+    <!-- friction cone; elliptic + impratio > 1 reduces creep slip in grasps -->
+    <xacro:arg name="cone" default="pyramidal"/>
+    <xacro:arg name="impratio" default="1"/>
     <!-- ============================================================= -->
 
     <xacro:arg name="arm_id" default="fr3" />
@@ -170,7 +183,8 @@
     <!-- ── Option ── -->
     <!-- Match dual_fr3_lab Reach v2, where gravity is disabled for the robot.
          Box lift sets gravity_z:=-9.81; the robot stays gravity-compensated (gravcomp). -->
-    <option timestep="0.001" integrator="implicitfast" gravity="0 0 $(arg gravity_z)" />
+    <option timestep="0.001" integrator="implicitfast" gravity="0 0 $(arg gravity_z)"
+            cone="$(arg cone)" impratio="$(arg impratio)" />
 
     <!-- ── Visual ── -->
     <visual>
@@ -229,20 +243,22 @@
         <!-- ground plane -->
         <geom name="floor" type="plane" size="0 0 0.05" material="groundplane" />
 
-        <!-- Movable, non-colliding reach markers. MujocoWorldSingleton updates
-             these mocap bodies from /reach_target_pose (expressed in `base`). -->
-        <body name="reach_target_center" mocap="true" pos="0.5 0.0 0.2">
-            <geom type="sphere" size="0.025" rgba="0.95 0.95 0.95 0.9"
-                  contype="0" conaffinity="0" group="0" />
-        </body>
-        <body name="reach_target_left" mocap="true" pos="0.5 0.2 0.2">
-            <geom type="sphere" size="0.035" rgba="0.1 0.4 1.0 0.9"
-                  contype="0" conaffinity="0" group="0" />
-        </body>
-        <body name="reach_target_right" mocap="true" pos="0.5 -0.2 0.2">
-            <geom type="sphere" size="0.035" rgba="1.0 0.3 0.1 0.9"
-                  contype="0" conaffinity="0" group="0" />
-        </body>
+        <xacro:if value="$(arg reach_markers)">
+            <!-- Movable, non-colliding reach markers. MujocoWorldSingleton updates
+                 these mocap bodies from /reach_target_pose (expressed in `base`). -->
+            <body name="reach_target_center" mocap="true" pos="0.5 0.0 0.2">
+                <geom type="sphere" size="0.025" rgba="0.95 0.95 0.95 0.9"
+                      contype="0" conaffinity="0" group="0" />
+            </body>
+            <body name="reach_target_left" mocap="true" pos="0.5 0.2 0.2">
+                <geom type="sphere" size="0.035" rgba="0.1 0.4 1.0 0.9"
+                      contype="0" conaffinity="0" group="0" />
+            </body>
+            <body name="reach_target_right" mocap="true" pos="0.5 -0.2 0.2">
+                <geom type="sphere" size="0.035" rgba="1.0 0.3 0.1 0.9"
+                      contype="0" conaffinity="0" group="0" />
+            </body>
+        </xacro:if>
 
         <!-- Base selection -->
         <xacro:if value="$(arg mobile)">
@@ -251,7 +267,15 @@
                     <!-- ROS robot-root frame. In the URDF this frame is named
                          `base`; mobile_base/base_link is offset from it by
                          [-0.345, 0, -mobile_mount_z]. -->
-                    <body name="base" pos="${mobile_base_x} 0 $(arg mobile_mount_z)"/>
+                    <body name="base" pos="${mobile_base_x} 0 $(arg mobile_mount_z)">
+                        <!-- Box-lift goal: training sets goal x/y = box start x/y (+ goal_dx/dy), z = goal_z, no rotation. -->
+                        <xacro:if value="$(arg with_box)">
+                            <geom name="box_goal" type="box"
+                                  pos="${$(arg box_x) + $(arg goal_dx)} ${$(arg box_y) + $(arg goal_dy)} $(arg goal_z)"
+                                  size="${$(arg box_size_x) / 2} ${$(arg box_size_y) / 2} ${$(arg box_size_z) / 2}"
+                                  rgba="0.2 0.9 0.3 0.25" contype="0" conaffinity="0" mass="0" group="0"/>
+                        </xacro:if>
+                    </body>
                     <body name="top_structure_link" pos="0 0 0.248">
                         <inertial pos="-0.108 0 0.252" mass="36.436" fullinertia="6.35 7.648 3.775 0.001 1.711 -0.004" />
                         <geom class="visual" pos="0 0 0" type="mesh" mesh="ROAS_structure" rgba="0.231 0.231 0.231 1.0"/>
@@ -284,10 +308,10 @@
             <!-- Box-lift object. Husky base_link sits at the world x/y origin, so `base` is at
                  world x = mobile_base_x; the box rests on the floor (z = half height). -->
             <xacro:if value="$(arg with_box)">
-                <body name="box" pos="${mobile_base_x + $(arg box_x)} $(arg box_y) 0.14"
+                <body name="box" pos="${mobile_base_x + $(arg box_x)} $(arg box_y) ${$(arg box_size_z) / 2}"
                       euler="0 0 $(arg box_yaw)">
                     <freejoint name="box_freejoint"/>
-                    <geom name="box_geom" type="box" size="0.205 0.155 0.14"
+                    <geom name="box_geom" type="box" size="${$(arg box_size_x) / 2} ${$(arg box_size_y) / 2} ${$(arg box_size_z) / 2}"
                           mass="$(arg box_mass)" friction="$(arg box_friction) 0.005 0.0001"
                           condim="$(arg box_condim)" solref="$(arg contact_timeconst) 1"
                           rgba="0.80 0.66 0.45 1.0"/>

@@ -41,11 +41,12 @@ from fr3_husky_msgs.msg import PolicyJointCommand
 from geometry_msgs.msg import PoseStamped
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time as RosTime
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
+from visualization_msgs.msg import Marker
 
 from .boxlift_core import (
     canonicalize_box_quat,
@@ -78,10 +79,14 @@ class PPOBoxLiftPolicyNode(Node):
         self.declare_parameter("box_size_tolerance_m", 0.005)
         self.declare_parameter("joint_states_topic", "/dual_fr3/joint_states")
         self.declare_parameter("box_pose_topic", "/box_pose")
+        # Added to the box position after it is expressed in base (orientation untouched), e.g. to remove
+        # a constant vision height offset so a resting box reads the trained rest height.
+        self.declare_parameter("box_position_offset_m", [0.0, 0.0, 0.0])
         self.declare_parameter("base_frame", "base")
         self.declare_parameter("command_topic", "/policy_joint_command")
         self.declare_parameter("control_action", "/fr3_policy_control")
         self.declare_parameter("goal_z_m", 0.15)
+        self.declare_parameter("goal_xy_offset_m", [0.0, 0.0])
         self.declare_parameter("joint_state_timeout_s", 0.15)
         self.declare_parameter("box_pose_timeout_s", 0.30)
         self.declare_parameter("command_timeout_s", 0.15)
@@ -105,7 +110,9 @@ class PPOBoxLiftPolicyNode(Node):
             model_path, self.box_size, float(self.get_parameter("box_size_tolerance_m").value)
         )
         self.goal_z = float(self.get_parameter("goal_z_m").value)
-        make_goal([0.0, 0.0], self.goal_z, self.manifest)  # fail at startup if z is outside training
+        self.goal_xy_offset = np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64)
+        # fail at startup if z or the x/y offset is outside training
+        make_goal([0.0, 0.0], self.goal_z, self.manifest, self.goal_xy_offset)
         self.max_policy_target_delta = float(self.get_parameter("max_policy_target_delta_rad").value)
         if not (float(self.manifest.action_clip[1]) < self.max_policy_target_delta <= 1.0):
             raise ValueError(
@@ -119,6 +126,9 @@ class PPOBoxLiftPolicyNode(Node):
         self.joint_velocity = np.full(14, np.nan)
         self.joint_update_ns = np.zeros(14, dtype=np.int64)
         self.box_position_b: Optional[np.ndarray] = None
+        self.box_position_offset = np.asarray(self.get_parameter("box_position_offset_m").value, dtype=np.float64)
+        if self.box_position_offset.shape != (3,) or not np.all(np.isfinite(self.box_position_offset)):
+            raise ValueError(f"box_position_offset_m must be 3 finite values, got {self.box_position_offset!r}")
         self.box_quat_b: Optional[np.ndarray] = None
         self.box_update_ns = 0
         self.box_stamp_ns = 0
@@ -156,6 +166,13 @@ class PPOBoxLiftPolicyNode(Node):
             self.get_parameter("command_topic").value,
             QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
+        # RViz: goal box (latched, set at start_policy) and the box as the policy sees it (offset applied).
+        self.goal_marker_publisher = self.create_publisher(
+            Marker, "~/goal_marker",
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
+        self.box_marker_publisher = self.create_publisher(Marker, "~/box_marker", 1)
         self.action_client = ActionClient(self, RunPolicyControl, self.get_parameter("control_action").value)
         self.create_service(Trigger, "~/start_policy", self._start_service)
         self.create_service(Trigger, "~/stop_policy", self._stop_service)
@@ -170,7 +187,9 @@ class PPOBoxLiftPolicyNode(Node):
             f"start {self.manifest.start_mode}"
             + ("" if self.manifest.pregrasp_joint_position is None
                else f" ({len(self.manifest.pregrasp_joint_position)} table rows)")
-            + f", goal z {self.goal_z:.3f} m, "
+            + f", goal z {self.goal_z:.3f} m, goal xy offset {self.goal_xy_offset.tolist()} m "
+            f"(trained x {self.manifest.goal_xy_offset_range[0].tolist()}, "
+            f"y {self.manifest.goal_xy_offset_range[1].tolist()}), "
             f"mode {'SHADOW' if self.shadow_mode else 'COMMAND'}"
         )
 
@@ -217,7 +236,7 @@ class PPOBoxLiftPolicyNode(Node):
         except (ValueError, TransformException) as error:
             self._log_status(f"Ignoring box pose: {error}")
             return
-        self.box_position_b, self.box_quat_b = position, quat
+        self.box_position_b, self.box_quat_b = position + self.box_position_offset, quat
         self.box_update_ns = self._now_ns()
         self.box_stamp_ns = RosTime.from_msg(msg.header.stamp).nanoseconds
 
@@ -260,8 +279,12 @@ class PPOBoxLiftPolicyNode(Node):
         if not self.shadow_mode and not self.action_client.server_is_ready():
             return False, "fr3_policy_control action server is not ready"
 
-        # Training: the goal x/y is the box start x/y, z is the lift height; previous action starts at 0.
-        self.goal = make_goal(self.box_position_b[:2], self.goal_z, self.manifest)
+        # Training: the goal x/y is the box start x/y (+ the trained offset), z is the lift height;
+        # previous action starts at 0.
+        self.goal = make_goal(self.box_position_b[:2], self.goal_z, self.manifest, self.goal_xy_offset)
+        self.goal_marker_publisher.publish(
+            self._box_marker("goal", self.goal[:3], self.goal[3:7], (0.1, 0.9, 0.2, 0.35))
+        )
         self.previous_action.fill(0.0)
         self.step_index = 0
         self.horizon_warned = False
@@ -358,8 +381,8 @@ class PPOBoxLiftPolicyNode(Node):
         parameters = {
             name: self.get_parameter(name).value
             for name in (
-                "box_size_m", "box_size_tolerance_m", "joint_states_topic", "box_pose_topic", "base_frame",
-                "goal_z_m", "joint_state_timeout_s", "box_pose_timeout_s", "command_timeout_s", "max_duration_s",
+                "box_size_m", "box_size_tolerance_m", "joint_states_topic", "box_pose_topic", "box_position_offset_m", "base_frame",
+                "goal_z_m", "goal_xy_offset_m", "joint_state_timeout_s", "box_pose_timeout_s", "command_timeout_s", "max_duration_s",
                 "max_policy_target_delta_rad", "ready_tolerance_rad", "start_position_margin_m",
                 "start_yaw_margin_rad", "rest_z_tolerance_m", "pregrasp_joint_margin_rad", "shadow_mode",
             )
@@ -378,7 +401,8 @@ class PPOBoxLiftPolicyNode(Node):
                     "box_start_yaw": float(yaw_from_quat(canonicalize_box_quat(self.box_quat_b))),
                     "start_mode": self.manifest.start_mode,
                     "start_table_row": self.start_table_row,
-                    "joint_start_position": self.joint_position,
+                    # copy: the logger rewrites metadata at finalize, after joint_position was updated in place
+                    "joint_start_position": self.joint_position.copy(),
                     "joint_names": list(DUAL_ARM_JOINT_NAMES),
                     "parameters": parameters,
                     "manifest": self.manifest.raw,
@@ -390,7 +414,29 @@ class PPOBoxLiftPolicyNode(Node):
             self.get_logger().error(f"Failed to start box-lift logging: {error}")
 
     # ------------------------------------------------------------------ policy tick
+    def _box_marker(self, ns: str, position, quat, rgba) -> Marker:
+        marker = Marker()
+        marker.header.frame_id = self.base_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns, marker.id, marker.type, marker.action = ns, 0, Marker.CUBE, Marker.ADD
+        p, o = marker.pose.position, marker.pose.orientation
+        p.x, p.y, p.z = (float(v) for v in position)
+        o.x, o.y, o.z, o.w = (float(v) for v in quat)
+        marker.scale.x, marker.scale.y, marker.scale.z = (float(v) for v in self.box_size)
+        marker.color.r, marker.color.g, marker.color.b, marker.color.a = rgba
+        return marker
+
     def _tick(self) -> None:
+        if self.box_position_b is not None:
+            self.box_marker_publisher.publish(
+                self._box_marker("policy_box", self.box_position_b, self.box_quat_b, (1.0, 0.55, 0.0, 0.5))
+            )
+            if self.state == "IDLE":
+                # Preview: the goal start_policy would latch for the box where it is now.
+                preview = make_goal(self.box_position_b[:2], self.goal_z, self.manifest, self.goal_xy_offset)
+                self.goal_marker_publisher.publish(
+                    self._box_marker("goal", preview[:3], preview[3:7], (0.1, 0.9, 0.2, 0.35))
+                )
         if self.state != "RUNNING":
             if self.state == "IDLE":
                 ready, message = self._inputs_ready()

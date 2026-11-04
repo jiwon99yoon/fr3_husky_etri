@@ -24,6 +24,9 @@ ppo_boxlift_policy_node:
     # Lift height of the box center in base_frame. Must lie in the manifest goal z range
     # (training: 0.15 - 0.35 m). The goal x/y is latched from the box position at start_policy.
     goal_z_m: 0.15
+    # Goal x/y = box start x/y + this offset (base frame, metres). Must lie in the manifest
+    # goal.xy_offset_range_base; checkpoints without that field trained a pure vertical lift (0, 0).
+    goal_xy_offset_m: [0.0, 0.0]
 
     joint_state_timeout_s: 0.15
     # Longer than one vision frame; a stale box pose while RUNNING is a fault (stop -> box drops).
@@ -65,11 +68,13 @@ ppo_boxlift_policy_node:
     # - both: box center z within rest_z_tolerance_m of the trained resting height.
     # Note: sim base height 0.405 m vs real URDF 0.392 m -> a resting box reads ~1.3 cm higher on
     # the real robot than in training.
+    # 2026-11-04 real robot with Azure Kinect /box_tf: the vision x jitters ~1.7 cm (4 s range) and a
+    # resting box with a bulged bottom reads z ~ -0.22, so both are widened past the training noise.
     ready_tolerance_rad: 0.20
     pregrasp_joint_margin_rad: 0.02
-    start_position_margin_m: 0.0
+    start_position_margin_m: 0.01
     start_yaw_margin_rad: 0.0
-    rest_z_tolerance_m: 0.03
+    rest_z_tolerance_m: 0.05
 
     # true: start_policy runs inference and logging only, nothing is published to the controller.
     shadow_mode: true

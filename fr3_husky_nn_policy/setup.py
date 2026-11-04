@@ -33,6 +33,8 @@ setup(
             "ppo_liftcube_policy_node = fr3_husky_nn_policy.ppo_liftcube_policy_node:main",
             "ppo_reach_policy_node = fr3_husky_nn_policy.ppo_reach_policy_node:main",
             "ppo_boxlift_policy_node = fr3_husky_nn_policy.ppo_boxlift_policy_node:main",
+            "box_pose_vision_sim = fr3_husky_nn_policy.box_pose_vision_sim:main",
+            "boxlift_start_helper = fr3_husky_nn_policy.boxlift_start_helper:main",
             "fr3_consistency_probe_node = fr3_husky_nn_policy.fr3_consistency_probe_node:main",
             "fr3_sysid_node = fr3_husky_nn_policy.fr3_sysid_node:main",
             "reach_target_cli = fr3_husky_nn_policy.reach_target_cli:main",

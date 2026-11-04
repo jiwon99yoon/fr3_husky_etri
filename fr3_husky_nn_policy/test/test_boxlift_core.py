@@ -165,6 +165,27 @@ def test_make_goal_rejects_untrained_height(manifest):
         make_goal([0.5, 0.0], 0.40, manifest)
 
 
+def test_goal_xy_offset_defaults_to_vertical_lift(manifest):
+    np.testing.assert_array_equal(manifest.goal_xy_offset_range, np.zeros((2, 2)))
+    np.testing.assert_allclose(make_goal([0.5, 0.02], 0.2, manifest)[:2], [0.5, 0.02])
+    with pytest.raises(ValueError, match="goal xy offset"):
+        make_goal([0.5, 0.0], 0.2, manifest, [0.02, 0.0])
+
+
+def test_goal_xy_offset_from_manifest_range():
+    raw = manifest_dict()
+    raw["goal"]["xy_offset_range_base"] = {"x": [-0.05, 0.05], "y": [-0.03, 0.03]}
+    shifted = BoxLiftManifest.from_dict(raw)
+    goal = make_goal([0.5, 0.02], 0.2, shifted, [0.04, -0.03])
+    np.testing.assert_allclose(goal[:3], [0.54, -0.01, 0.2])
+    np.testing.assert_array_equal(goal[3:], [0.0, 0.0, 0.0, 1.0])
+    with pytest.raises(ValueError, match="goal xy offset"):
+        make_goal([0.5, 0.0], 0.2, shifted, [0.0, 0.04])
+    raw["goal"]["xy_offset_range_base"] = {"x": [0.05, -0.05], "y": [0.0, 0.0]}
+    with pytest.raises(ValueError, match="xy_offset_range_base.x"):
+        BoxLiftManifest.from_dict(raw)
+
+
 def test_build_observation_rejects_bad_inputs(manifest):
     good = dict(joint_position=manifest.default_position, joint_velocity=np.zeros(14),
                 box_position_b=[0.5, 0.0, -0.265], box_quat_b=GOAL_QUAT_XYZW,

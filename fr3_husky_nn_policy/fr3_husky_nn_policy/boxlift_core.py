@@ -18,7 +18,7 @@ that holds the actor weights and a ``manifest_json`` describing the training run
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -167,6 +167,9 @@ class BoxLiftManifest:
     start_joint_noise: float = 0.0                     # uniform +/- training reset noise
     start_box_pos_noise: float = 0.0
     start_box_yaw_noise: float = 0.0
+    # Goal x/y = box start x/y + offset; per-axis (low, high) offset range sampled in training
+    # (manifest goal.xy_offset_range_base). Exports without it trained a pure vertical lift: (0, 0).
+    goal_xy_offset_range: np.ndarray = field(default_factory=lambda: np.zeros((2, 2)))
 
     @classmethod
     def from_dict(cls, raw: dict, arrays: Mapping[str, np.ndarray] | None = None) -> "BoxLiftManifest":
@@ -178,6 +181,10 @@ class BoxLiftManifest:
             scale_range = box["size_scale_range"]
             limits = np.asarray(action["target_limits"], dtype=np.float64)
             start = _parse_start(raw.get("start") or {"mode": START_READY_POSE}, arrays)
+            offset_range = goal.get("xy_offset_range_base")
+            if offset_range is not None:
+                start["goal_xy_offset_range"] = np.stack(
+                    [_pair(offset_range[a], f"goal.xy_offset_range_base.{a}") for a in "xy"])
             manifest = cls(
                 raw=raw,
                 joint_names=tuple(str(n) for n in joints["names"]),
@@ -301,15 +308,25 @@ def load_boxlift_policy(model_path: str | Path, physical_box_size: Sequence[floa
 
 
 # --------------------------------------------------------------------------- observation / action
-def make_goal(start_xy: Sequence[float], goal_z: float, manifest: BoxLiftManifest) -> np.ndarray:
-    """Goal term: box start x/y, chosen lift height z, identity quaternion (x, y, z, w)."""
+def make_goal(start_xy: Sequence[float], goal_z: float, manifest: BoxLiftManifest,
+              xy_offset: Sequence[float] = (0.0, 0.0)) -> np.ndarray:
+    """Goal term: box start x/y + xy_offset, chosen lift height z, identity quaternion (x, y, z, w)."""
     start_xy = np.asarray(start_xy, dtype=np.float64)
     if start_xy.shape != (2,) or not np.all(np.isfinite(start_xy)):
         raise ValueError(f"start_xy must be two finite values, got {start_xy!r}")
     low, high = manifest.goal_z_range
     if not (np.isfinite(goal_z) and low <= goal_z <= high):
         raise ValueError(f"goal z {goal_z} is outside the trained range [{low}, {high}] (base frame)")
-    return np.concatenate([start_xy, [float(goal_z)], GOAL_QUAT_XYZW])
+    xy_offset = np.asarray(xy_offset, dtype=np.float64)
+    if xy_offset.shape != (2,) or not np.all(np.isfinite(xy_offset)):
+        raise ValueError(f"goal xy offset must be two finite values, got {xy_offset!r}")
+    offset_range = manifest.goal_xy_offset_range
+    if np.any(xy_offset < offset_range[:, 0] - 1e-9) or np.any(xy_offset > offset_range[:, 1] + 1e-9):
+        raise ValueError(
+            f"goal xy offset {xy_offset.tolist()} is outside the trained range "
+            f"x {offset_range[0].tolist()}, y {offset_range[1].tolist()} (base frame)"
+        )
+    return np.concatenate([start_xy + xy_offset, [float(goal_z)], GOAL_QUAT_XYZW])
 
 
 def build_observation(joint_position, joint_velocity, box_position_b, box_quat_b, goal,

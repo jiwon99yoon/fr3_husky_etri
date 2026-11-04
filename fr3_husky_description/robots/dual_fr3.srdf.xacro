@@ -14,6 +14,9 @@
 
     <!-- Should self-collision be enabled? -->
     <xacro:arg name="with_sc" default="false" />
+
+    <!-- Wrist D435i on each arm? Must match the URDF. -->
+    <xacro:arg name="with_realsense" default="true" />
     <!-- ============================================================= -->
 
     <xacro:franka_arm_srdf arm_id="fr3"
@@ -1112,8 +1115,10 @@
          the Isaac-style plate rigidly to link8. Their collision geometries
          intentionally overlap as parts of the same end-effector assembly. -->
     <xacro:unless value="$(arg hand)">
-        <disable_collisions link1="left_d435i_link" link2="left_fr3_plate_ee" reason="Adjacent"/>
-        <disable_collisions link1="right_d435i_link" link2="right_fr3_plate_ee" reason="Adjacent"/>
+        <xacro:if value="$(arg with_realsense)">
+            <disable_collisions link1="left_d435i_link" link2="left_fr3_plate_ee" reason="Adjacent"/>
+            <disable_collisions link1="right_d435i_link" link2="right_fr3_plate_ee" reason="Adjacent"/>
+        </xacro:if>
     </xacro:unless>
 
     <group name="dual_fr3_arm">
