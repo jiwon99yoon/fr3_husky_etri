@@ -170,6 +170,10 @@ class BoxLiftManifest:
     # Goal x/y = box start x/y + offset; per-axis (low, high) offset range sampled in training
     # (manifest goal.xy_offset_range_base). Exports without it trained a pure vertical lift: (0, 0).
     goal_xy_offset_range: np.ndarray = field(default_factory=lambda: np.zeros((2, 2)))
+    # Per-axis (low, high) absolute goal x/y range in base (manifest goal.xy_range_base): training sampled the goal
+    # x/y there independently of the box (UniformPoseCommand), so the trained offset depends on the box start and
+    # make_goal checks the final goal x/y instead of the offset. None = offset-range manifest.
+    goal_xy_range: np.ndarray | None = None
 
     @classmethod
     def from_dict(cls, raw: dict, arrays: Mapping[str, np.ndarray] | None = None) -> "BoxLiftManifest":
@@ -182,9 +186,14 @@ class BoxLiftManifest:
             limits = np.asarray(action["target_limits"], dtype=np.float64)
             start = _parse_start(raw.get("start") or {"mode": START_READY_POSE}, arrays)
             offset_range = goal.get("xy_offset_range_base")
+            xy_range = goal.get("xy_range_base")
+            if offset_range is not None and xy_range is not None:
+                raise ValueError("manifest goal has both xy_offset_range_base and xy_range_base")
             if offset_range is not None:
                 start["goal_xy_offset_range"] = np.stack(
                     [_pair(offset_range[a], f"goal.xy_offset_range_base.{a}") for a in "xy"])
+            if xy_range is not None:
+                start["goal_xy_range"] = np.stack([_pair(xy_range[a], f"goal.xy_range_base.{a}") for a in "xy"])
             manifest = cls(
                 raw=raw,
                 joint_names=tuple(str(n) for n in joints["names"]),
@@ -308,25 +317,57 @@ def load_boxlift_policy(model_path: str | Path, physical_box_size: Sequence[floa
 
 
 # --------------------------------------------------------------------------- observation / action
-def make_goal(start_xy: Sequence[float], goal_z: float, manifest: BoxLiftManifest,
-              xy_offset: Sequence[float] = (0.0, 0.0)) -> np.ndarray:
-    """Goal term: box start x/y + xy_offset, chosen lift height z, identity quaternion (x, y, z, w)."""
-    start_xy = np.asarray(start_xy, dtype=np.float64)
-    if start_xy.shape != (2,) or not np.all(np.isfinite(start_xy)):
-        raise ValueError(f"start_xy must be two finite values, got {start_xy!r}")
+def _outside(value: np.ndarray, bounds: np.ndarray) -> bool:
+    return bool(np.any(value < bounds[:, 0] - 1e-9) or np.any(value > bounds[:, 1] + 1e-9))
+
+
+def check_goal_settings(goal_z: float, xy_offset: Sequence[float], manifest: BoxLiftManifest) -> np.ndarray:
+    """Check the operator goal settings that do not depend on where the box is; returns the offset.
+
+    Offset-range manifests check the offset itself. Absolute-range manifests can only reject an offset that no
+    trained box start reaches (goal range minus start range); make_goal checks the actual goal.
+    """
     low, high = manifest.goal_z_range
     if not (np.isfinite(goal_z) and low <= goal_z <= high):
         raise ValueError(f"goal z {goal_z} is outside the trained range [{low}, {high}] (base frame)")
     xy_offset = np.asarray(xy_offset, dtype=np.float64)
     if xy_offset.shape != (2,) or not np.all(np.isfinite(xy_offset)):
         raise ValueError(f"goal xy offset must be two finite values, got {xy_offset!r}")
-    offset_range = manifest.goal_xy_offset_range
-    if np.any(xy_offset < offset_range[:, 0] - 1e-9) or np.any(xy_offset > offset_range[:, 1] + 1e-9):
+    if manifest.goal_xy_range is None:
+        offset_range = manifest.goal_xy_offset_range
+        if _outside(xy_offset, offset_range):
+            raise ValueError(
+                f"goal xy offset {xy_offset.tolist()} is outside the trained range "
+                f"x {offset_range[0].tolist()}, y {offset_range[1].tolist()} (base frame)"
+            )
+        return xy_offset
+    start = np.stack([manifest.start_x_range, manifest.start_y_range])
+    reachable = manifest.goal_xy_range - start[:, ::-1]
+    if _outside(xy_offset, reachable):
         raise ValueError(
-            f"goal xy offset {xy_offset.tolist()} is outside the trained range "
-            f"x {offset_range[0].tolist()}, y {offset_range[1].tolist()} (base frame)"
+            f"goal xy offset {xy_offset.tolist()} cannot reach the trained goal range "
+            f"x {manifest.goal_xy_range[0].tolist()}, y {manifest.goal_xy_range[1].tolist()} from any trained "
+            f"box start (possible offsets x {reachable[0].round(3).tolist()}, "
+            f"y {reachable[1].round(3).tolist()}, base frame)"
         )
-    return np.concatenate([start_xy + xy_offset, [float(goal_z)], GOAL_QUAT_XYZW])
+    return xy_offset
+
+
+def make_goal(start_xy: Sequence[float], goal_z: float, manifest: BoxLiftManifest,
+              xy_offset: Sequence[float] = (0.0, 0.0)) -> np.ndarray:
+    """Goal term: box start x/y + xy_offset, chosen lift height z, identity quaternion (x, y, z, w)."""
+    start_xy = np.asarray(start_xy, dtype=np.float64)
+    if start_xy.shape != (2,) or not np.all(np.isfinite(start_xy)):
+        raise ValueError(f"start_xy must be two finite values, got {start_xy!r}")
+    xy_offset = check_goal_settings(goal_z, xy_offset, manifest)
+    goal_xy = start_xy + xy_offset
+    if manifest.goal_xy_range is not None and _outside(goal_xy, manifest.goal_xy_range):
+        raise ValueError(
+            f"goal xy {goal_xy.round(4).tolist()} (box start {start_xy.round(4).tolist()} + offset "
+            f"{xy_offset.tolist()}) is outside the trained goal range x {manifest.goal_xy_range[0].tolist()}, "
+            f"y {manifest.goal_xy_range[1].tolist()} (base frame)"
+        )
+    return np.concatenate([goal_xy, [float(goal_z)], GOAL_QUAT_XYZW])
 
 
 def build_observation(joint_position, joint_velocity, box_position_b, box_quat_b, goal,

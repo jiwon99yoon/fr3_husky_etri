@@ -125,49 +125,71 @@ ros2 service call /ppo_boxlift_policy_node/stop_policy std_srvs/srv/Trigger {}
 
 - 목표 = (시작 박스 x + `goal_xy_offset_m[0]`, 시작 박스 y + `goal_xy_offset_m[1]`, `goal_z_m`), 회전 없음. 모두 base 좌표계, m.
 - 시작 박스 x/y는 `start_policy`를 받은 순간 정책이 보는 박스 위치(`box_position_offset_m` 적용 후)다. 실행 중에는 바뀌지 않는다.
-- `goal_z_m`, `goal_xy_offset_m`은 노드가 켜질 때 한 번 읽는다. 바꾸려면 launch를 다시 켠다.
-- 노드는 학습 범위 밖의 값을 켜질 때 거부한다. 범위는 NPZ manifest에서 읽는다.
+- `goal_z_m`, `goal_xy_offset_m`은 `start_policy` 때마다 다시 읽는다. 세션 사이(IDLE)에 `ros2 param set`으로 바꾸면 되고, launch를 다시 켤 필요가 없다.
+- 노드는 학습 범위를 NPZ manifest에서 읽어 범위 밖 값을 거부한다.
   - z: `goal.z_range_base` (지금 모델들 0.15~0.35)
-  - x/y 오프셋: `goal.xy_offset_range_base`. 이 항목이 없는 체크포인트는 수직 들기만 학습한 것으로 보고 `[0, 0]`만 허용한다(2026-11-05까지 받은 모델 전부).
+  - x/y는 체크포인트가 목표를 뽑은 방식에 따라 둘 중 하나다.
+    - `goal.xy_offset_range_base`: 시작 박스 기준 오프셋 범위. 수직 들기 모델은 `[0, 0]`이다. 이 항목이 없는 예전 체크포인트도 `[0, 0]`만 허용한다.
+    - `goal.xy_range_base`: 목표 x/y의 절대 범위(base). 학습 때 목표를 박스와 상관없이 이 범위에서 뽑았다(GoalXY 모델). 시작 박스 + 오프셋이 이 범위 안이어야 한다. 그래서 같은 오프셋도 박스 위치에 따라 거부될 수 있고, 박스가 범위 밖(예: x 0.39)에 있으면 오프셋 0도 거부된다.
+- 거부되는 때
+  - `ros2 param set`: 형식이 틀렸거나, z가 범위 밖이거나, 어떤 학습 시작 위치에서도 학습 범위에 닿지 않는 오프셋이면 바로 실패한다. 세션이 PENDING/RUNNING이면 goal 값 변경 자체를 거부한다.
+  - `start_policy`: 지금 박스 위치로 계산한 목표가 학습 범위 밖이면 이유와 함께 거부한다. 성공하면 응답에 목표가 찍힌다.
 
-### 목표 x/y 오프셋을 학습한 체크포인트를 쓸 때
+### 목표 x/y를 옮기는 체크포인트를 쓸 때
 
-launch 명령 끝에 `goal_xy_offset_m`을 붙인다. x +는 로봇에서 멀어지는 쪽, y +는 로봇 왼쪽이다.
+지금 받은 모델 중 GoalXY 두 개(`models/facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model_{4700,5499}.npz`)가 목표 x/y를 옮길 수 있다. 학습 범위는 목표 x 0.40~0.50, y −0.10~0.10 (base)이다. 시작 자세 후보는 `model/dual_fr3_boxlift_pregrasp_wide_rollalign_facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model{4700,5499}_start_poses.yaml`(후보 A~E와 같은 박스 다섯 위치)다.
+
+launch는 오프셋 0으로 켜고, 시도마다 터미널에서 바꾼다. x +는 로봇에서 멀어지는 쪽, y +는 로봇 왼쪽이다. 값은 소수점으로 쓴다. `[0, 0.05]`처럼 정수가 섞이면 타입 오류로 거부된다.
 
 ```bash
-ros2 launch fr3_husky_nn_policy dual_fr3_boxlift_policy.launch.py \
-  model_path:=$PWD/fr3_husky_nn_policy/models/<새모델>.npz \
-  box_size_m:="[0.310, 0.410, 0.280]" \
-  shadow_mode:=false launch_move_group:=true goal_z_m:=0.25 \
-  box_pose_topic:=/box_tf box_position_offset_m:="[0.0, 0.0, -0.03]" \
-  goal_xy_offset_m:="[0.03, -0.02]"
+ros2 param set /ppo_boxlift_policy_node goal_xy_offset_m "[0.0, 0.05]"
+ros2 param set /ppo_boxlift_policy_node goal_z_m 0.25
+# RViz 'Box-lift goal'이 옮겨진 자리에 초록이면 시작 가능, 빨강이면 start_policy가 거부한다
+ros2 service call /ppo_boxlift_policy_node/start_policy std_srvs/srv/Trigger {}
 ```
 
-넣기 전에 학습 범위를 확인한다(`none`이면 오프셋을 줄 수 없다).
+- 처음 값은 launch 인자(`goal_xy_offset_m:="[0.03, -0.02]"`, `goal_z_m:=0.25`)로 줄 수도 있다.
+- `boxlift_start_helper`도 지금 박스 위치로 목표를 계산한다. 거부될 목표면 `REFUSED by start_policy: ...` 줄을 찍는다.
+- MuJoCo(`use_mujoco:=true`) 뷰어의 초록 목표 박스는 launch 인자로 준 처음 값만 반영한다. `ros2 param set`은 노드 목표와 RViz만 바꾼다.
+
+모델의 학습 범위 확인:
 
 ```bash
 cd ~/jw_ws/src/fr3_husky/fr3_husky_nn_policy
-python3 -c "import numpy as np,json,sys; m=json.loads(str(np.load(sys.argv[1])['manifest_json'])); print('xy offset:', m['goal'].get('xy_offset_range_base', 'none (0 only)'), ' z:', m['goal']['z_range_base'])" models/<새모델>.npz
+python3 -c "import numpy as np,json,sys; g=json.loads(str(np.load(sys.argv[1])['manifest_json']))['goal']; print('xy offset:', g.get('xy_offset_range_base', 'none (0 only)'), ' xy absolute:', g.get('xy_range_base', 'none'), ' z:', g['z_range_base'])" models/<새모델>.npz
 ```
 
-launch 로그의 `Loaded ...` 줄에도 `goal xy offset [...] m (trained x [...], y [...])`가 나온다. MuJoCo(`use_mujoco:=true`)에서도 같은 인자로 초록 목표 박스가 옮겨진다.
+launch 로그의 `Loaded ...` 줄에도 `trained offset x [...], y [...]` 또는 `trained absolute goal x [...], y [...]`가 나온다.
 
-### 학습 PC: manifest에 넣어야 할 항목 (dual_fr3_lab)
+### 학습 PC: manifest의 goal 항목 (dual_fr3_lab)
 
-목표 x/y를 시작 위치에서 떨어뜨려 학습한 체크포인트는 `dual_fr3_lab/scripts/tools/export_boxlift_actor.py`가 manifest `goal`에 학습한 오프셋 범위를 써야 한다. 없으면 실로봇 노드가 오프셋을 거부한다.
+`dual_fr3_lab/scripts/tools/export_boxlift_actor.py`가 학습 command 설정을 보고 둘 중 하나를 쓴다(2026-11-05부터).
+
+수직 들기(`VerticalLiftPoseCommand`):
 
 ```json
 "goal": {
   "command_class": "...VerticalLiftPoseCommand",
   "z_range_base": [0.15, 0.35],
   "quat_xyzw": [0.0, 0.0, 0.0, 1.0],
-  "xy_offset_range_base": {"x": [-0.05, 0.05], "y": [-0.05, 0.05]}
+  "xy_offset_range_base": {"x": [0.0, 0.0], "y": [0.0, 0.0]}
 }
 ```
 
-- 값은 base 좌표계에서 **시작 박스 위치 기준 오프셋(m)**의 축별 (low, high)다. 위 숫자는 예시다. 학습 command 설정의 실제 범위를 넣는다.
-- 노드 쪽 파싱: `boxlift_core.BoxLiftManifest.goal_xy_offset_range`, 검사: `boxlift_core.make_goal`.
-- 오프셋을 원형(반지름)으로 뽑거나 시작 위치와 무관한 절대 좌표로 뽑는 학습이면 이 형식이 맞지 않는다. 노드 쪽 `make_goal`과 파싱을 그 방식에 맞게 바꿔야 한다.
+GoalXY(`UniformPoseCommand`, 박스와 상관없이 목표를 뽑는 학습):
+
+```json
+"goal": {
+  "command_class": "isaaclab.envs.mdp.commands.pose_command:UniformPoseCommand",
+  "z_range_base": [0.15, 0.35],
+  "quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+  "xy_range_base": {"x": [0.4, 0.5], "y": [-0.1, 0.1]}
+}
+```
+
+- `xy_offset_range_base`는 시작 박스 기준 오프셋(m), `xy_range_base`는 목표 절대 좌표(m)의 축별 (low, high)다. 둘 다 있으면 노드가 manifest를 거부한다.
+- 노드 쪽 파싱: `BoxLiftManifest.goal_xy_offset_range` / `goal_xy_range`. 검사: `boxlift_core.check_goal_settings`(박스와 무관한 값 검사, `ros2 param set`), `boxlift_core.make_goal`(시작 박스까지 넣은 검사, `start_policy`).
+- 오프셋을 원형(반지름)으로 뽑는 학습은 아직 형식이 없다. 그런 학습을 만들면 exporter와 노드 파싱·검사를 같이 바꾼다.
 
 ### RViz 표시
 
@@ -175,7 +197,7 @@ launch가 띄우는 RViz(`fr3_husky_controller/rviz/fr3.rviz`)에 다음이 들�
 
 | Displays 이름 | 토픽 | 색 | 내용 |
 |---|---|---|---|
-| Box-lift goal | `/ppo_boxlift_policy_node/goal_marker` | 초록 | 시작 전: 지금 박스 위치로 계산한 목표(박스를 따라 움직임). 실행 중: `start_policy` 순간 고정된 목표 |
+| Box-lift goal | `/ppo_boxlift_policy_node/goal_marker` | 초록 (빨강) | 시작 전: 지금 박스 위치와 지금 goal 파라미터로 계산한 목표(박스를 따라 움직임). 빨강이면 학습 범위 밖이라 `start_policy`가 거부한다. 실행 중: `start_policy` 순간 고정된 목표 |
 | Box-lift policy box | `/ppo_boxlift_policy_node/box_marker` | 주황 | 정책이 보는 박스(비전 + `box_position_offset_m`), 20 Hz |
 | Vision box (raw /box_tf) | `/box_tf/marker` | 초록(비전 노드) | 기본 꺼짐. 비전 원래 값 |
 

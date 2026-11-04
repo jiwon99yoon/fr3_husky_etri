@@ -18,6 +18,11 @@ start_policy is refused unless the arms and the box are inside the start distrib
 trained on: the ready pose for ``start.mode=ready_pose``, or one row of the pre-grasp table embedded in
 the NPZ for ``start.mode=pregrasp_table`` (move the arms there with MoveIt first, then place the box).
 
+Goal: start_policy latches box start x/y + ``goal_xy_offset_m`` and the lift height ``goal_z_m``. Both can be
+changed between sessions with ``ros2 param set`` (refused while a session is PENDING/RUNNING or outside
+training). A checkpoint trained with an absolute goal x/y range (manifest ``goal.xy_range_base``) refuses
+start_policy when box start + offset leaves that range; the IDLE goal preview marker is red then.
+
 WARNING: stopping for any reason (stop service, fault, Ctrl-C, controller abort) ends the controller
 goal. The controller then holds the measured joint positions, which releases the plate squeeze, so a
 lifted box WILL DROP. A hold/lower mode is not implemented yet.
@@ -39,6 +44,7 @@ import rclpy
 from fr3_husky_msgs.action import RunPolicyControl
 from fr3_husky_msgs.msg import PolicyJointCommand
 from geometry_msgs.msg import PoseStamped
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -49,7 +55,9 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import Marker
 
 from .boxlift_core import (
+    GOAL_QUAT_XYZW,
     canonicalize_box_quat,
+    check_goal_settings,
     check_start_conditions,
     build_observation,
     load_boxlift_policy,
@@ -109,10 +117,9 @@ class PPOBoxLiftPolicyNode(Node):
         self.actor, self.manifest = load_boxlift_policy(
             model_path, self.box_size, float(self.get_parameter("box_size_tolerance_m").value)
         )
-        self.goal_z = float(self.get_parameter("goal_z_m").value)
-        self.goal_xy_offset = np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64)
-        # fail at startup if z or the x/y offset is outside training
-        make_goal([0.0, 0.0], self.goal_z, self.manifest, self.goal_xy_offset)
+        # fail at startup if z or the x/y offset is outside training; later changes are checked in _on_set_parameters
+        goal_z, goal_xy_offset = self._goal_settings()
+        check_goal_settings(goal_z, goal_xy_offset, self.manifest)
         self.max_policy_target_delta = float(self.get_parameter("max_policy_target_delta_rad").value)
         if not (float(self.manifest.action_clip[1]) < self.max_policy_target_delta <= 1.0):
             raise ValueError(
@@ -177,7 +184,11 @@ class PPOBoxLiftPolicyNode(Node):
         self.create_service(Trigger, "~/start_policy", self._start_service)
         self.create_service(Trigger, "~/stop_policy", self._stop_service)
         self.timer = self.create_timer(self.manifest.policy_dt, self._tick)
+        self.add_on_set_parameters_callback(self._on_set_parameters)
 
+        offset_range, xy_range = self.manifest.goal_xy_offset_range, self.manifest.goal_xy_range
+        trained_xy = (f"trained offset x {offset_range[0].tolist()}, y {offset_range[1].tolist()}" if xy_range is None
+                      else f"trained absolute goal x {xy_range[0].tolist()}, y {xy_range[1].tolist()}")
         provenance = self.manifest.raw["provenance"]
         self.get_logger().info(
             f"Loaded {model_path}: {provenance.get('experiment_name')}/{provenance.get('run_name')} "
@@ -187,11 +198,32 @@ class PPOBoxLiftPolicyNode(Node):
             f"start {self.manifest.start_mode}"
             + ("" if self.manifest.pregrasp_joint_position is None
                else f" ({len(self.manifest.pregrasp_joint_position)} table rows)")
-            + f", goal z {self.goal_z:.3f} m, goal xy offset {self.goal_xy_offset.tolist()} m "
-            f"(trained x {self.manifest.goal_xy_offset_range[0].tolist()}, "
-            f"y {self.manifest.goal_xy_offset_range[1].tolist()}), "
+            + f", goal z {goal_z:.3f} m, goal xy offset {goal_xy_offset.tolist()} m ({trained_xy}), "
             f"mode {'SHADOW' if self.shadow_mode else 'COMMAND'}"
         )
+
+    # ------------------------------------------------------------------ goal settings
+    def _goal_settings(self) -> tuple[float, np.ndarray]:
+        """Current goal_z_m and goal_xy_offset_m (read at every start_policy and IDLE preview)."""
+        return (float(self.get_parameter("goal_z_m").value),
+                np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64))
+
+    def _on_set_parameters(self, parameters) -> SetParametersResult:
+        changed = {p.name: p.value for p in parameters if p.name in ("goal_z_m", "goal_xy_offset_m")}
+        if not changed:
+            return SetParametersResult(successful=True)
+        if self.state != "IDLE":
+            return SetParametersResult(successful=False,
+                                       reason=f"goal settings can only change while IDLE (session {self.state})")
+        goal_z, goal_xy_offset = self._goal_settings()
+        try:
+            check_goal_settings(float(changed.get("goal_z_m", goal_z)),
+                                changed.get("goal_xy_offset_m", goal_xy_offset), self.manifest)
+        except (TypeError, ValueError) as error:
+            return SetParametersResult(successful=False, reason=str(error))
+        self.get_logger().info(
+            "goal settings accepted: " + ", ".join(f"{k} {np.asarray(v).tolist()}" for k, v in changed.items()))
+        return SetParametersResult(successful=True)
 
     # ------------------------------------------------------------------ inputs
     def _now_ns(self) -> int:
@@ -275,13 +307,18 @@ class PPOBoxLiftPolicyNode(Node):
         )
         if not start.ok:
             return False, "; ".join(start.reasons)
+        # Training: the goal x/y is the box start x/y (+ the trained offset), z is the lift height;
+        # previous action starts at 0.
+        goal_z, goal_xy_offset = self._goal_settings()
+        try:
+            goal_base = make_goal(self.box_position_b[:2], goal_z, self.manifest, goal_xy_offset)
+        except ValueError as error:
+            return False, str(error)
         self.start_table_row = start.table_row
         if not self.shadow_mode and not self.action_client.server_is_ready():
             return False, "fr3_policy_control action server is not ready"
 
-        # Training: the goal x/y is the box start x/y (+ the trained offset), z is the lift height;
-        # previous action starts at 0.
-        self.goal = make_goal(self.box_position_b[:2], self.goal_z, self.manifest, self.goal_xy_offset)
+        self.goal = goal_base
         self.goal_marker_publisher.publish(
             self._box_marker("goal", self.goal[:3], self.goal[3:7], (0.1, 0.9, 0.2, 0.35))
         )
@@ -296,6 +333,8 @@ class PPOBoxLiftPolicyNode(Node):
         self._open_log()
 
         row = "" if self.start_table_row is None else f", pre-grasp table row {self.start_table_row}"
+        row += (f", goal {np.round(self.goal[:3], 3).tolist()} m "
+                f"(box start + offset {goal_xy_offset.tolist()}, z {goal_z})")
         if self.shadow_mode:
             self.state = "RUNNING"
             return True, f"shadow session started{row} (inference and logging only, no commands)"
@@ -432,11 +471,17 @@ class PPOBoxLiftPolicyNode(Node):
                 self._box_marker("policy_box", self.box_position_b, self.box_quat_b, (1.0, 0.55, 0.0, 0.5))
             )
             if self.state == "IDLE":
-                # Preview: the goal start_policy would latch for the box where it is now.
-                preview = make_goal(self.box_position_b[:2], self.goal_z, self.manifest, self.goal_xy_offset)
-                self.goal_marker_publisher.publish(
-                    self._box_marker("goal", preview[:3], preview[3:7], (0.1, 0.9, 0.2, 0.35))
-                )
+                # Preview: the goal start_policy would latch for the box where it is now
+                # (red: outside the trained goal range for this box position, start_policy refuses it).
+                goal_z, goal_xy_offset = self._goal_settings()
+                rgba = (0.1, 0.9, 0.2, 0.35)
+                try:
+                    make_goal(self.box_position_b[:2], goal_z, self.manifest, goal_xy_offset)
+                except ValueError as error:
+                    rgba = (0.9, 0.1, 0.1, 0.35)
+                    self._log_status(f"idle: {error}")
+                self.goal_marker_publisher.publish(self._box_marker(
+                    "goal", np.append(self.box_position_b[:2] + goal_xy_offset, goal_z), GOAL_QUAT_XYZW, rgba))
         if self.state != "RUNNING":
             if self.state == "IDLE":
                 ready, message = self._inputs_ready()

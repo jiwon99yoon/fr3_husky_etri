@@ -23,9 +23,12 @@ ppo_boxlift_policy_node:
 
     # Lift height of the box center in base_frame. Must lie in the manifest goal z range
     # (training: 0.15 - 0.35 m). The goal x/y is latched from the box position at start_policy.
+    # goal_z_m and goal_xy_offset_m are read at every start_policy; change them between sessions with
+    # `ros2 param set /ppo_boxlift_policy_node goal_z_m 0.25` (refused while a session runs).
     goal_z_m: 0.15
-    # Goal x/y = box start x/y + this offset (base frame, metres). Must lie in the manifest
-    # goal.xy_offset_range_base; checkpoints without that field trained a pure vertical lift (0, 0).
+    # Goal x/y = box start x/y + this offset (base frame, metres). Checked against the manifest:
+    # goal.xy_offset_range_base = trained offset range (checkpoints without it: vertical lift, 0 only);
+    # goal.xy_range_base = trained absolute goal x/y range, box start + offset must lie inside it.
     goal_xy_offset_m: [0.0, 0.0]
 
     joint_state_timeout_s: 0.15

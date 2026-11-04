@@ -14,6 +14,7 @@ from fr3_husky_nn_policy.boxlift_core import (
     BoxLiftManifest,
     build_observation,
     canonicalize_box_quat,
+    check_goal_settings,
     check_start_conditions,
     load_boxlift_policy,
     make_goal,
@@ -183,6 +184,29 @@ def test_goal_xy_offset_from_manifest_range():
         make_goal([0.5, 0.0], 0.2, shifted, [0.0, 0.04])
     raw["goal"]["xy_offset_range_base"] = {"x": [0.05, -0.05], "y": [0.0, 0.0]}
     with pytest.raises(ValueError, match="xy_offset_range_base.x"):
+        BoxLiftManifest.from_dict(raw)
+
+
+def test_goal_xy_absolute_range():
+    raw = manifest_dict()
+    raw["goal"]["xy_range_base"] = {"x": [0.40, 0.50], "y": [-0.10, 0.10]}
+    absolute = BoxLiftManifest.from_dict(raw)
+    np.testing.assert_array_equal(absolute.goal_xy_range, [[0.40, 0.50], [-0.10, 0.10]])
+    # training sampled the goal apart from the box: box start + offset must stay in the goal range
+    np.testing.assert_allclose(make_goal([0.46, 0.02], 0.2, absolute, [0.03, 0.08])[:3], [0.49, 0.10, 0.2])
+    np.testing.assert_allclose(make_goal([0.46, 0.02], 0.2, absolute)[:2], [0.46, 0.02])
+    with pytest.raises(ValueError, match="outside the trained goal range"):
+        make_goal([0.48, 0.0], 0.2, absolute, [0.03, 0.0])
+    with pytest.raises(ValueError, match="outside the trained goal range"):
+        make_goal([0.55, 0.0], 0.2, absolute)  # box beyond the goal range: not even a vertical lift trained
+    # box-independent check (parameter changes): only offsets no trained start can use are refused
+    np.testing.assert_array_equal(check_goal_settings(0.2, [-0.15, 0.15], absolute), [-0.15, 0.15])
+    with pytest.raises(ValueError, match="from any trained box start"):
+        check_goal_settings(0.2, [0.0, 0.5], absolute)
+    with pytest.raises(ValueError, match="outside the trained range"):
+        check_goal_settings(0.40, [0.0, 0.0], absolute)
+    raw["goal"]["xy_offset_range_base"] = {"x": [0.0, 0.0], "y": [0.0, 0.0]}
+    with pytest.raises(ValueError, match="both"):
         BoxLiftManifest.from_dict(raw)
 
 

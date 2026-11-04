@@ -163,8 +163,9 @@ def generate_launch_description():
             DeclareLaunchArgument("goal_z_m", default_value="0.15",
                                   description="box-center lift height in base (trained 0.15-0.35)"),
             DeclareLaunchArgument("goal_xy_offset_m", default_value="[0.0, 0.0]",
-                                  description="goal x/y = box start x/y + this (base); must be in the "
-                                              "manifest goal.xy_offset_range_base (old checkpoints: 0 only)"),
+                                  description="goal x/y = box start x/y + this (base); checked against the "
+                                              "manifest goal.xy_offset_range_base (old checkpoints: 0 only) "
+                                              "or goal.xy_range_base (absolute goal x/y)"),
             DeclareLaunchArgument("box_size_m", default_value="[0.410, 0.310, 0.280]",
                                   description="physical box (x, y squeezed, z) in base; must match the policy's box"),
             DeclareLaunchArgument("box_pose_topic", default_value="/box_pose"),

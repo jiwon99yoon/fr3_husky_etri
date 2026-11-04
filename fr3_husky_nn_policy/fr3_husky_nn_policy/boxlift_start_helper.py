@@ -35,6 +35,7 @@ from .boxlift_core import (
     canonicalize_box_quat,
     check_start_conditions,
     load_boxlift_policy,
+    make_goal,
     normalize_quat,
     yaw_from_quat,
 )
@@ -117,6 +118,10 @@ def main(argv=None) -> int:
         goal_xy = position[:2] + np.asarray(p["goal_xy_offset_m"], dtype=np.float64)
         print(f"goal    x {goal_xy[0]:.3f}  y {goal_xy[1]:+.3f}  z {p['goal_z_m']:+.3f}  "
               f"(start + offset {p['goal_xy_offset_m']}; RViz 'Box-lift goal' after start_policy)")
+        try:
+            make_goal(position[:2], p["goal_z_m"], manifest, p["goal_xy_offset_m"])
+        except ValueError as error:
+            print(f"        REFUSED by start_policy: {error}")
         if rate < 20.0:
             print("        WARNING: below the 20 Hz policy rate; the node faults after "
                   "box_pose_timeout_s without a pose")
