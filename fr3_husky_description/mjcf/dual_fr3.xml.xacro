@@ -49,12 +49,36 @@
     <xacro:arg name="azure_color_height" default="1080"/>
     <xacro:arg name="azure_depth_width"  default="640"/>
     <xacro:arg name="azure_depth_height" default="576"/>
+
+    <!-- Box-lift validation. Defaults keep the Reach scene unchanged.
+         gravity_z: robot bodies are gravcomp="1", so gravity only acts on free objects (the box).
+         mobile_mount_z: arm mount plane (`base`) above Husky base_link; 0.26 puts it 0.392 m
+           above the floor, 0.2727 reproduces the 0.405 m of the Isaac training scene.
+         box_*: free 410 x 310 x 280 mm box resting on the floor, pose given in `base` (x, y, yaw).
+           MuJoCo uses the larger friction of a geom pair, so plate_friction should not exceed
+           box_friction when sweeping box friction.
+         contact_timeconst: solref time constant of the box and plate geoms (MuJoCo default 0.02 s;
+           smaller = stiffer contact, keep >= 2 x timestep). Both get it because MuJoCo mixes the pair. -->
+    <xacro:arg name="gravity_z" default="0"/>
+    <xacro:arg name="mobile_mount_z" default="0.26"/>
+    <xacro:arg name="with_box" default="false"/>
+    <xacro:arg name="box_x" default="0.485"/>
+    <xacro:arg name="box_y" default="0.0"/>
+    <xacro:arg name="box_yaw" default="0.0"/>
+    <xacro:arg name="box_mass" default="0.5"/>
+    <xacro:arg name="box_friction" default="0.8"/>
+    <xacro:arg name="box_condim" default="4"/>
+    <xacro:arg name="plate_friction" default="1"/>
+    <xacro:arg name="contact_timeconst" default="0.02"/>
     <!-- ============================================================= -->
 
     <xacro:arg name="arm_id" default="fr3" />
     <xacro:property name="arm_ids_str" value="fr3 fr3" />
     <xacro:property name="robot_prefixes_list" value="${['left','right']}" />
     <xacro:property name="robot_prefixes_str" value="${' '.join(robot_prefixes_list)}" />
+
+    <!-- `base` (arm mount midpoint) ahead of Husky base_link on the mobile scene. -->
+    <xacro:property name="mobile_base_x" value="0.345"/>
 
     <xacro:property name="xyzs_str"
                     value="${'0.345 0.215 0.26;0.345 -0.215 0.26' if '$(arg mobile)' == 'true' else '0 0.34 0.715;0 -0.34 0.715'}" />
@@ -125,7 +149,9 @@
             finger_vis_mesh_materials="['off_white','black']">
             <cam_body>
                 <xacro:unless value="$(arg hand)">
-                    <xacro:plate_ee_mjcf prefix="${arm_prefix}_fr3"/>
+                    <xacro:plate_ee_mjcf prefix="${arm_prefix}_fr3"
+                                         friction="$(arg plate_friction) 0.005 0.0001"
+                                         solref="$(arg contact_timeconst) 1"/>
                 </xacro:unless>
                 <xacro:if value="$(arg with_realsense)">
                     <xacro:realsense_d435i_mjcf prefix="${arm_prefix}" ee2cam_tf="${ee2cam_tf}"
@@ -142,8 +168,9 @@
     <compiler angle="radian" autolimits="true" />
 
     <!-- ── Option ── -->
-    <!-- Match dual_fr3_lab Reach v2, where gravity is disabled for the robot. -->
-    <option timestep="0.001" integrator="implicitfast" gravity="0 0 0" />
+    <!-- Match dual_fr3_lab Reach v2, where gravity is disabled for the robot.
+         Box lift sets gravity_z:=-9.81; the robot stays gravity-compensated (gravcomp). -->
+    <option timestep="0.001" integrator="implicitfast" gravity="0 0 $(arg gravity_z)" />
 
     <!-- ── Visual ── -->
     <visual>
@@ -223,8 +250,8 @@
                 <additional_comp>
                     <!-- ROS robot-root frame. In the URDF this frame is named
                          `base`; mobile_base/base_link is offset from it by
-                         [-0.345, 0, -0.26]. -->
-                    <body name="base" pos="0.345 0 0.26"/>
+                         [-0.345, 0, -mobile_mount_z]. -->
+                    <body name="base" pos="${mobile_base_x} 0 $(arg mobile_mount_z)"/>
                     <body name="top_structure_link" pos="0 0 0.248">
                         <inertial pos="-0.108 0 0.252" mass="36.436" fullinertia="6.35 7.648 3.775 0.001 1.711 -0.004" />
                         <geom class="visual" pos="0 0 0" type="mesh" mesh="ROAS_structure" rgba="0.231 0.231 0.231 1.0"/>
@@ -234,12 +261,12 @@
                     
                     <xacro:dual_fr3_arm arm_prefix="left"
                                         connected_to="left_tmp_base"
-                                        xyz="0.345 0.215 0.26"
+                                        xyz="${mobile_base_x} 0.215 $(arg mobile_mount_z)"
                                         rpy="0 0 0.523598776"
                                         ee2cam_tf="${ee2cam_left_tf}"/>
                     <xacro:dual_fr3_arm arm_prefix="right"
                                         connected_to="right_tmp_base"
-                                        xyz="0.345 -0.215 0.26"
+                                        xyz="${mobile_base_x} -0.215 $(arg mobile_mount_z)"
                                         rpy="0 0 -0.523598776"
                                         ee2cam_tf="${ee2cam_right_tf}"/>
 
@@ -253,6 +280,19 @@
 
                 </additional_comp>
             </xacro:husky>
+
+            <!-- Box-lift object. Husky base_link sits at the world x/y origin, so `base` is at
+                 world x = mobile_base_x; the box rests on the floor (z = half height). -->
+            <xacro:if value="$(arg with_box)">
+                <body name="box" pos="${mobile_base_x + $(arg box_x)} $(arg box_y) 0.14"
+                      euler="0 0 $(arg box_yaw)">
+                    <freejoint name="box_freejoint"/>
+                    <geom name="box_geom" type="box" size="0.205 0.155 0.14"
+                          mass="$(arg box_mass)" friction="$(arg box_friction) 0.005 0.0001"
+                          condim="$(arg box_condim)" solref="$(arg contact_timeconst) 1"
+                          rgba="0.80 0.66 0.45 1.0"/>
+                </body>
+            </xacro:if>
         </xacro:if>
 
 

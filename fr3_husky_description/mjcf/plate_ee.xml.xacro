@@ -12,8 +12,10 @@
       and represent the measured physical plate assembly independently.  The
       132.4 g assembly is approximated as a uniform 140 x 140 x 25 mm box.
     -->
-    <xacro:macro name="plate_ee_mjcf" params="prefix">
-        <body name="${prefix}_plate_ee" euler="0 0 ${3.0 * pi / 4.0}">
+    <!-- gravcomp="1" like the FR3 links: gravity acts only on free objects
+         (no effect while the scene gravity is zero). -->
+    <xacro:macro name="plate_ee_mjcf" params="prefix friction:='1 0.005 0.0001' solref:='0.02 1'">
+        <body name="${prefix}_plate_ee" euler="0 0 ${3.0 * pi / 4.0}" gravcomp="1">
             <!-- COM at the geometric centre, measured from the flange face. -->
             <inertial pos="0 0 0.0125"
                       mass="0.1324"
@@ -29,6 +31,8 @@
                   type="box"
                   pos="0 0 0.0125"
                   size="0.07 0.07 0.0125"
+                  friction="${friction}"
+                  solref="${solref}"
                   mass="0" density="0"/>
             <site name="${prefix}_plate_ee_tcp" pos="0 0 0.025"/>
         </body>

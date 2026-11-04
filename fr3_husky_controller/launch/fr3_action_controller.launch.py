@@ -1,5 +1,6 @@
 import os
 import math
+import re
 import yaml
 import tempfile
 import xacro
@@ -140,6 +141,30 @@ def _mujoco_dynamics_yaml(source_path, damping, frictionloss):
     return generated.name
 
 
+def _with_initial_joint_positions(robot_description, raw_positions, robot_sides):
+    """Set the ros2_control position initial_value of the FR3 arm joints (MuJoCo start pose).
+
+    raw_positions: 7 values per arm in robot_side order (left j1..j7, then right j1..j7 for dual).
+    """
+    values = raw_positions.replace(',', ' ').split()
+    names = [f'{side}_fr3_joint{i}' for side in robot_sides for i in range(1, 8)]
+    if len(values) != len(names):
+        raise RuntimeError(
+            f"mujoco_initial_joint_positions needs {len(names)} values, got {len(values)}")
+    for name, value in zip(names, values):
+        if not math.isfinite(float(value)):
+            raise RuntimeError(f"mujoco_initial_joint_positions: {name} is not finite")
+        pattern = re.compile(
+            r'(<joint name="' + re.escape(name) + r'">.*?<state_interface name="position">\s*'
+            r'<param name="initial_value">)[^<]*(</param>)',
+            re.DOTALL,
+        )
+        robot_description, count = pattern.subn(r'\g<1>' + value + r'\g<2>', robot_description)
+        if count != 1:
+            raise RuntimeError(f"ros2_control position initial_value of {name} not found")
+    return robot_description
+
+
 def _launch_setup(context, *args, **kwargs):
     robot_sides = _normalize_robot_sides(
         _parse_robot_side(LaunchConfiguration('robot_side').perform(context))
@@ -157,6 +182,9 @@ def _launch_setup(context, *args, **kwargs):
     mujoco_armature      = _nonnegative_float_launch_argument(context, 'mujoco_armature')
     mujoco_damping       = _nonnegative_float_launch_argument(context, 'mujoco_damping')
     mujoco_frictionloss  = _nonnegative_float_launch_argument(context, 'mujoco_frictionloss')
+    mujoco_scene_extra_args        = LaunchConfiguration('mujoco_scene_extra_args').perform(context).strip()
+    mujoco_initial_joint_positions = LaunchConfiguration('mujoco_initial_joint_positions').perform(context).strip()
+    mujoco_object_pose_body        = LaunchConfiguration('mujoco_object_pose_body').perform(context).strip()
 
     if not robot_sides:
         raise RuntimeError("robot_side must be 'left', 'right', or 'dual'.")
@@ -193,6 +221,9 @@ def _launch_setup(context, *args, **kwargs):
         }
 
     robot_description = xacro.process_file(urdf_path, mappings=xacro_mappings).toprettyxml(indent='  ')
+    if use_mujoco.lower() == 'true' and mujoco_initial_joint_positions:
+        robot_description = _with_initial_joint_positions(
+            robot_description, mujoco_initial_joint_positions, robot_sides)
 
     # Controllers YAML
     controllers_yaml_source = os.path.join(pkg_ctrl, 'config', 'fr3_ros_controllers.yaml')
@@ -230,6 +261,8 @@ def _launch_setup(context, *args, **kwargs):
             )
         else:
             xacro_args += f' side:={robot_sides[0]}'
+        if mujoco_scene_extra_args:
+            xacro_args += f' {mujoco_scene_extra_args}'
         cm_params.extend([
             {'mujoco_scene_xacro_path': mjcf_path},
             {'mujoco_scene_xacro_args': xacro_args},
@@ -237,6 +270,13 @@ def _launch_setup(context, *args, **kwargs):
             {'mujoco_reach_target_frame': 'base'},
             {'mujoco_reach_target_offset_y': 0.20},
         ])
+        if mujoco_object_pose_body:
+            cm_params.append({
+                'mujoco_object_pose_body': mujoco_object_pose_body,
+                'mujoco_object_pose_frame': 'base',
+                'mujoco_object_pose_topic': '/box_pose',
+                'mujoco_object_pose_rate': 30.0,
+            })
     controller_prefix = 'taskset -c 2,3' if use_mujoco.lower() == 'false' else None
 
     #  robot_state_publisher: direct subscription when using MuJoCo 
@@ -500,5 +540,11 @@ def generate_launch_description():
         DeclareLaunchArgument('mujoco_armature',      default_value='0.1', description='MuJoCo FR3 joint armature'),
         DeclareLaunchArgument('mujoco_damping',       default_value='0.003', description='MuJoCo FR3 joint viscous damping'),
         DeclareLaunchArgument('mujoco_frictionloss',  default_value='0.2', description='MuJoCo FR3 joint Coulomb friction loss'),
+        DeclareLaunchArgument('mujoco_scene_extra_args', default_value='',
+                              description='Extra MJCF xacro args, e.g. "gravity_z:=-9.81 with_box:=true"'),
+        DeclareLaunchArgument('mujoco_initial_joint_positions', default_value='',
+                              description='MuJoCo start pose: 7 arm joint values per side (left then right), empty = default'),
+        DeclareLaunchArgument('mujoco_object_pose_body', default_value='',
+                              description='MuJoCo body whose pose in base is published on /box_pose (empty = off)'),
         OpaqueFunction(function=_launch_setup),
     ])
