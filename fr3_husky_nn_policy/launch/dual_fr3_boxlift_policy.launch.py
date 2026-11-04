@@ -98,6 +98,7 @@ def _launch_setup(context, *args, **kwargs):
                 "model_path": LaunchConfiguration("model_path"),
                 "shadow_mode": ParameterValue(LaunchConfiguration("shadow_mode"), value_type=bool),
                 "goal_z_m": ParameterValue(LaunchConfiguration("goal_z_m"), value_type=float),
+                "box_size_m": ParameterValue(LaunchConfiguration("box_size_m"), value_type=list[float]),
                 "box_pose_topic": LaunchConfiguration("box_pose_topic"),
                 "log_task_name": PythonExpression(
                     [
@@ -119,6 +120,8 @@ def generate_launch_description():
             DeclareLaunchArgument("shadow_mode", default_value="true"),
             DeclareLaunchArgument("goal_z_m", default_value="0.15",
                                   description="box-center lift height in base (trained 0.15-0.35)"),
+            DeclareLaunchArgument("box_size_m", default_value="[0.410, 0.310, 0.280]",
+                                  description="physical box (x, y squeezed, z) in base; must match the policy's box"),
             DeclareLaunchArgument("box_pose_topic", default_value="/box_pose"),
             DeclareLaunchArgument("launch_controller", default_value="true"),
             DeclareLaunchArgument("load_mobile", default_value="true"),

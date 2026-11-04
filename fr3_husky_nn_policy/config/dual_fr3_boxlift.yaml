@@ -5,9 +5,11 @@ ppo_boxlift_policy_node:
     # and the policy rate are read from the manifest, not from this file.
     model_path: ""
 
-    # Physical box on the robot, (x, y, z) in metres: x = 410 mm edge, y = 310 mm edge squeezed by
-    # the plates, z = height. The node refuses a checkpoint whose trained box size (incl. size
+    # Physical box on the robot, (x, y, z) in metres: x = front-back edge, y = edge squeezed by the
+    # plates, z = height. The node refuses a checkpoint whose trained box size (incl. size
     # randomization) does not cover this box +/- box_size_tolerance_m.
+    # 410 mm front-back (-Pregrasp, -Box410): [0.410, 0.310, 0.280]; 410 mm left-right (-Pregrasp-Wide):
+    # [0.310, 0.410, 0.280]. dual_fr3_boxlift_policy.launch.py sets this from its box_size_m argument.
     box_size_m: [0.410, 0.310, 0.280]
     box_size_tolerance_m: 0.005
 
