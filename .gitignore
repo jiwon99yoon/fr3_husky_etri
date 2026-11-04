@@ -7,3 +7,4 @@ __pycache__/
 /fr3_husky_nn_policy/fr3_husky_nn_policy/__pycache__
 /fr3_husky_nn_policy/test/__pycache__
 /logs_before_260929/
+/data/**/bag_*/
