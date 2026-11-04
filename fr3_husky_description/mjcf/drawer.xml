@@ -1,0 +1,31 @@
+<mujoco model="drawer">
+    <body name="drawer" pos="0 0 0.195">
+        <!-- <inertial pos="0 0 0" mass="1" /> -->
+        <geom class="visual" name="lower_visual" type="box" pos="0 0 -0.1865" size="0.195 0.195 0.0085" rgba="0.6 0.3 0.0 1.0" />
+        <geom class="visual" name="upper_visual" type="box" pos="0 0 0.1865"  size="0.195 0.195 0.0085" rgba="0.6 0.3 0.0 1.0" />
+        <geom class="visual" name="left_visual"  type="box" pos="0 -0.1865 0" size="0.195 0.0085 0.178" rgba="0.6 0.3 0.0 1.0" />
+        <geom class="visual" name="right_visual" type="box" pos="0 0.1865 0"  size="0.195 0.0085 0.178" rgba="0.6 0.3 0.0 1.0" />
+        <geom class="visual" name="back_visual"  type="box" pos="-0.1865 0 0" size="0.0085 0.178 0.178" rgba="0.6 0.3 0.0 1.0" />
+        <geom class="collision" name="lower_collision" type="box" pos="0 0 -0.1865" size="0.195 0.195 0.0085" />
+        <geom class="collision" name="upper_collision" type="box" pos="0 0 0.1865"  size="0.195 0.195 0.0085" />
+        <geom class="collision" name="left_collision"  type="box" pos="0 -0.1865 0" size="0.195 0.0085 0.178" />
+        <geom class="collision" name="right_collision" type="box" pos="0 0.1865 0"  size="0.195 0.0085 0.178" />
+        <geom class="collision" name="back_collision"  type="box" pos="-0.1865 0 0" size="0.0085 0.178 0.178" />
+        
+        <body name="door" pos="0.1865 0 0">
+            <!-- <inertial pos="0 0 0" mass="0.1" /> -->
+            <joint name="drawer_joint" type="hinge" pos="0 -0.1555 0" axis="0 0 1" limited="true" range="-2.0944 0" damping="1" stiffness="0.2" springref="0"/>
+            <geom class="visual"    name="door_visual"    type="box" pos="0 0 0" size="0.0085 0.1725 0.1725" rgba="0.6 0.3 0.0 1.0" />
+            <geom class="collision" name="door_collision" type="box" pos="0 0 0" size="0.0085 0.1725 0.1725" />
+            <body name="handle" pos="0.0085 0.1475 0">
+                <!-- <inertial pos="0 0 0" mass="0.1" /> -->
+                <geom class="visual"    name="handle_upper_visual" type="box" pos="0.03 0 0.1475" size="0.03 0.015 0.015" rgba="0.6 0.3 0.0 1.0" />
+                <geom class="visual"    name="handle_lower_visual" type="box" pos="0.03 0 -0.1475" size="0.03 0.015 0.015" rgba="0.6 0.3 0.0 1.0" />
+                <geom class="visual"    name="handle_side_visual"  type="cylinder" pos="0.045 0 0" size="0.015 0.1325" rgba="0.6 0.3 0.0 1.0" />
+                <geom class="collision"    name="handle_upper_collision" type="box" pos="0.03 0 0.1475" size="0.03 0.015 0.015" rgba="0.6 0.3 0.0 1.0" />
+                <geom class="collision"    name="handle_lower_collision" type="box" pos="0.03 0 -0.1475" size="0.03 0.015 0.015" rgba="0.6 0.3 0.0 1.0" />
+                <geom class="collision"    name="handle_side_collision"  type="cylinder" pos="0.045 0 0" size="0.015 0.1325" rgba="0.6 0.3 0.0 1.0" />
+            </body>
+        </body>
+    </body>
+</mujoco>
