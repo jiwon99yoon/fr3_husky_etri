@@ -1,0 +1,26 @@
+ppo_cabinet_book_insert_policy_node:
+  ros__parameters:
+    # NPZ from export_cabinet_book_insert_actor; first run shadow_mode:=true.
+    model_path: ""
+    joint_states_topic: /dual_fr3/joint_states
+    book_pose_topic: /cabinet_book_insert/book_pose
+    door_angle_topic: /cabinet_book_insert/door_angle
+    base_frame: base
+    command_topic: /policy_joint_command
+    control_action: /fr3_policy_control
+    joint_state_timeout_s: 0.15
+    book_pose_timeout_s: 0.25
+    door_angle_timeout_s: 0.25
+    command_timeout_s: 0.15
+    max_policy_target_delta_rad: 0.20
+    start_door_angle_tolerance_rad: 0.20
+    # every joint within this of one training start row (embedded in the NPZ)
+    start_joint_tolerance_rad: 0.10
+    # controller goal: max_actuator_step_rad must be in (0, 0.01]; joint speed limit on j1-4 = 2.62 x
+    # joint_velocity_scale (0.10 -> 0.26 rad/s, 0.19 -> 0.5 rad/s = Slow checkpoints), capped at step / 1 ms
+    max_actuator_step_rad: 0.001
+    joint_velocity_scale: 0.10
+    joint_acceleration_scale: 0.20
+    relative_target_refresh_hz: 1000.0
+    shadow_mode: true
+    log_root: ""

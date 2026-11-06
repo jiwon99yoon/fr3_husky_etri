@@ -1,0 +1,24 @@
+cabinet_book_insert_fk_node:
+  ros__parameters:
+    base_frame: base
+    left_link7_frame: left_fr3_link7
+    right_link7_frame: right_fr3_link7
+    book_pose_topic: /cabinet_book_insert/book_pose
+    door_angle_topic: /cabinet_book_insert/door_angle
+    left_tcp_pose_topic: /cabinet_book_insert/left_tcp_pose
+    # Isaac cabinet task's link7 -> UMI fingertip-center TCP transform.
+    umi_tcp_offset_position: [0.0, 0.0, 0.2844]
+    umi_tcp_offset_quaternion_xyzw: [0.0, 0.0, -0.3826834, 0.9238795]
+    # Isaac task's right-hand grasp (TCP pose in the book frame).
+    right_tcp_in_book_position: [-0.0608578644, 0.0, -0.0141421356]
+    right_tcp_in_book_quaternion_xyzw: [0.9238795, 0.0, 0.3826834, 0.0]
+    # Fill after measuring in base frame (or pass -p on the command line). Unset (NaN) disables door angle.
+    # Trained layout (docs/dual_fr3_cabinet_book_real_setup.md): hinge [0.7635, 0.2555, 0.24],
+    # left TCP with the door closed [0.7241, -0.035, 0.2259].
+    hinge_position_base: [.nan, .nan, .nan]
+    left_tcp_closed_position_base: [.nan, .nan, .nan]
+    # The angle is the left TCP's counter-clockwise turn about the hinge (seen from above). In the trained
+    # layout (hinge at robot left) the door opens clockwise, so -1.0 makes opening positive as in training.
+    # Check: a small physical opening must give a positive /door_angle.
+    door_angle_sign: -1.0
+    publish_rate_hz: 50.0

@@ -39,6 +39,9 @@ setup(
             "fr3_sysid_node = fr3_husky_nn_policy.fr3_sysid_node:main",
             "reach_target_cli = fr3_husky_nn_policy.reach_target_cli:main",
             "export_ppo_actor = fr3_husky_nn_policy.export_ppo_actor:main",
+            "export_cabinet_book_insert_actor = fr3_husky_nn_policy.export_cabinet_book_insert_actor:main",
+            "ppo_cabinet_book_insert_policy_node = fr3_husky_nn_policy.ppo_cabinet_book_insert_policy_node:main",
+            "cabinet_book_insert_fk_node = fr3_husky_nn_policy.cabinet_book_insert_fk_node:main",
         ],
     },
 )
