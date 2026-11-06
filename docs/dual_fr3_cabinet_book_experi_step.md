@@ -8,8 +8,11 @@
 |---|---|---|
 | `cabinet_book_insert_open_door_upright_pretrain_model_2499.npz` | 문 90° 열림, 왼손이 열린 문의 손잡이를 잡음 | 영상 3/3 성공, 약 1.5 s에 넣음, 끝 기울기 2.5°, 깊이 11.8 cm |
 | `cabinet_book_insert_closed_door_stage2_model_7498.npz` | 문 닫힘 | 121개 시작 위치 중 120 성공, 첫 성공 중앙 1.2 s, 끝 기울기 중앙 4.1°, 깊이 12.9 cm |
+| `cabinet_book_insert_v1_model_14999.npz` | 문 닫힘 | 성공 0 (책을 기울인 채 깊이·레인만 맞춤, 비교용) |
 
-- 둘 다 v2(codex 2단계 학습)다. 2499가 1단계, 7498이 그 이어 학습이다. v1(15000)은 책을 27° 기울여 넣어 sim 성공 0이라 export하지 않았다.
+- 2499, 7498은 v2(codex 2단계 학습)다. 2499가 1단계, 7498이 그 이어 학습이다.
+- v1(`v1_5070`, 15000 iteration)은 보상이 책 위치만 보고 기울기를 안 봐서, 책을 기울인 채 넣는 국소해에 머물렀다(sim 성공 0, book_depth 1.68/2.0, book_lane 0.85/1.0). v2와 비교하려고 export했다(2026-11-07). 관측·행동 형식은 v2와 같다.
+- 실로봇 관찰(2026-11-07): 7498이 문을 끝까지 열기 전에 책을 넣으려 했다. sim에서도 문 약 60°에서 책이 들어가기 시작했다(책 보상 게이트가 60~80°).
 - **둘 다 sim에서 관절 약 2 rad/s로 움직인다**(행동이 매 step 0.1 rad까지). 실로봇 제어기 기본(`joint_velocity_scale` 0.10)은 j1~4 0.26 rad/s라 로봇이 정책보다 약 8배 느리게 따라간다. 노드가 시작할 때 경고를 띄운다. 정책이 학습 때 보지 못한 상태가 되므로 sim처럼 움직이지 않을 수 있다.
 - 7498은 sim에서 손잡이에 중앙 56 N(최대 448 N)을 썼다. 실물 UMI 파지가 미끄러질 수 있다.
 
@@ -33,6 +36,7 @@
    cd ~/jw_ws && colcon build --symlink-install --packages-select fr3_husky_nn_policy && source install/setup.bash
    ```
 3. 배치를 맞춘다: 책상 윗면은 **팔 장착면 + 0.045 m**, 수납장 밑면 중심 (0.950, 0.100), 경첩 축 (0.7635, 0.2555), 손잡이 막대 축 (0.710, −0.035). 자세한 것은 배치 문서.
+   - 실물 장착면은 바닥 위 약 0.38 m라, 학습 배치는 책상 0.425 m다. 45 cm 책상이면 2.5 cm 높다. 책과 수납장이 함께 올라가 상대 위치는 같으니 그대로 시험한다. 다만 책 pose(FK)의 z는 실제보다 2.5 cm 낮게 나온다(배치 문서 "바닥 높이 주의").
 
 **모든 터미널 공통**
 
@@ -52,6 +56,7 @@ ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
 ```
 
 - open-door 정책은 `model_path`만 `cabinet_book_insert_open_door_upright_pretrain_model_2499.npz`로 바꾼다.
+- v1은 `model_path`만 `cabinet_book_insert_v1_model_14999.npz`로 바꾼다(문 닫힘 시작, 7498과 같음).
 - 로그 확인:
   - `Joint speed: trained up to 2.00 rad/s ..., controller limit [0.26, ...]`
   - 느리다는 WARN
