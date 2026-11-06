@@ -94,14 +94,20 @@ shadow mode still starts, command mode refuses; re-export them.
 The goal fields are node parameters now (`max_actuator_step_rad` 0.001, `joint_velocity_scale` 0.10,
 `joint_acceleration_scale` 0.20, `relative_target_refresh_hz` 1000; the boxlift values). Before,
 the node sent `max_actuator_step_rad` 0.03, which the controller rejects (it accepts (0, 0.01]).
-The controller limits j1-j4 to 2.62 x `joint_velocity_scale` rad/s (0.10 -> 0.26 rad/s). The node
-logs this next to the speed the checkpoint was trained for (action clip / policy dt) and warns
-when the robot is slower:
+Correction (2026-11-07, checked in `policy_control_action_server.cpp`): the node always sends
+`isaac_relative_control: true` with policy-step absolute targets. On that path the controller sends
+the target straight to the Isaac PD and the torque-rate limiter (1 Nm per 1 ms). The rate limiter that
+uses `joint_velocity_scale` / `max_actuator_step_rad` runs only in the non-Isaac mode. Here these two
+fields are validated and nothing more, so **the arms move at the trained speed** (action clip / policy dt).
+A lower `joint_velocity_scale` does not slow them. The only way to move slower is a slower checkpoint:
 
-| checkpoint | trained joint step | trained speed | `joint_velocity_scale` for that speed on j1-j4 |
-|---|---|---|---|
-| v2 open-door 2499 / closed-door 7498 | 0.10 rad / 50 ms | 2.0 rad/s | 0.76 and `max_actuator_step_rad` >= 0.002 (not recommended; run slower and expect lag) |
-| v3 Slow | 0.025 rad / 50 ms | 0.5 rad/s | 0.19 |
+| checkpoint | trained joint step | speed on the robot |
+|---|---|---|
+| v1 14999, v2 open-door 2499 / closed-door 7498 | 0.10 rad / 50 ms | up to 2.0 rad/s |
+| v3 Slow | 0.025 rad / 50 ms | up to 0.5 rad/s |
+
+Real robot (2026-11-07): 7498 moved joints 0.9 rad in 0.93 s (e-stop). v1 14999 moved them 1.4 rad
+in 1.4 s, then hit a Franka `cartesian_reflex` while opening the door (at 42 deg).
 
 Shadow mode logs observation, action, and target without publishing robot commands.
 Each session is recorded under `fr3_husky_nn_policy/data/cabinet_book_insert/`.

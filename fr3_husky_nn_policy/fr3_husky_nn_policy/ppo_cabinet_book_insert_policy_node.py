@@ -35,10 +35,9 @@ from .cabinet_book_insert_core import (
     process_action,
 )
 
-# fr3_husky_controller policy_control_action_server: joint speed limit = these x joint_velocity_scale, capped at
-# max_actuator_step_rad per 1 kHz control period; the goal is rejected unless 0 < max_actuator_step_rad <= 0.01.
-FR3_MAX_JOINT_VELOCITY = np.array([2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26])
-CONTROL_PERIOD_S = 0.001
+# fr3_husky_controller policy_control_action_server: with isaac_relative_control (always set here) the targets go
+# straight to the Isaac PD + torque-rate limiter. joint_velocity_scale / max_actuator_step_rad are only validated
+# (the goal is rejected unless 0 < max_actuator_step_rad <= 0.01); they do not slow the arms in this mode.
 
 
 class PPOCabinetBookInsertPolicyNode(Node):
@@ -58,7 +57,7 @@ class PPOCabinetBookInsertPolicyNode(Node):
         self.declare_parameter("max_policy_target_delta_rad", 0.20)
         self.declare_parameter("start_door_angle_tolerance_rad", 0.20)
         self.declare_parameter("start_joint_tolerance_rad", 0.10)
-        # controller goal (boxlift values); joint_velocity_scale 0.19 = 0.5 rad/s on j1-4 (Slow checkpoints)
+        # controller goal (boxlift values); validated by the controller, not applied in the Isaac PD mode used here
         self.declare_parameter("max_actuator_step_rad", 0.001)
         self.declare_parameter("joint_velocity_scale", 0.10)
         self.declare_parameter("joint_acceleration_scale", 0.20)
@@ -82,8 +81,6 @@ class PPOCabinetBookInsertPolicyNode(Node):
             raise ValueError("max_actuator_step_rad must be in (0, 0.01] (the controller rejects the goal otherwise)")
         if not (0.0 < self.joint_velocity_scale <= 1.0 and 0.0 < self.joint_acceleration_scale <= 1.0):
             raise ValueError("joint_velocity_scale and joint_acceleration_scale must be in (0, 1]")
-        real_speed = np.minimum(FR3_MAX_JOINT_VELOCITY * self.joint_velocity_scale,
-                                self.max_actuator_step / CONTROL_PERIOD_S)
         trained_speed = self.manifest.action_clip[1] / self.manifest.policy_dt
 
         self.q = np.full(ACTION_DIM, np.nan, dtype=np.float64)
@@ -133,12 +130,8 @@ class PPOCabinetBookInsertPolicyNode(Node):
             "Inputs: JointState + book-center PoseStamped (TF to base) + Float64 door angle "
             "(positive=open, rad). Start is operator-triggered.")
         self.get_logger().info(
-            f"Joint speed: trained up to {trained_speed:.2f} rad/s per joint, controller limit "
-            f"{np.round(real_speed, 2).tolist()} rad/s (j1-j7)")
-        if real_speed.min() < 0.9 * trained_speed:
-            self.get_logger().warn(
-                "The controller is slower than the policy was trained for; the arms lag the policy's targets "
-                "(states it did not see in training).")
+            f"Joint speed: up to {trained_speed:.2f} rad/s per joint as trained (Isaac PD on the policy-step "
+            "target; joint_velocity_scale does not limit it)")
         if self.manifest.start_joint_position is None:
             self.get_logger().warn("NPZ has no start rows: start_policy cannot check the start pose (re-export it)")
         else:

@@ -65,7 +65,7 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_rviz", default_value="true"),
         DeclareLaunchArgument("launch_move_group", default_value="false"),
         DeclareLaunchArgument("load_gripper", default_value="true"),
-        # controller joint speed: j1-j4 limit = 2.62 x scale (0.10 -> 0.26 rad/s, 0.19 -> 0.5 rad/s), capped at step / 1 ms
+        # validated by the controller only; the Isaac PD mode used here does not slow the arms with these
         DeclareLaunchArgument("joint_velocity_scale", default_value="0.10"),
         DeclareLaunchArgument("max_actuator_step_rad", default_value="0.001"),
         DeclareLaunchArgument("joint_states_topic", default_value="/dual_fr3/joint_states"),

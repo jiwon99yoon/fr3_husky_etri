@@ -13,7 +13,7 @@
 - 2499, 7498은 v2(codex 2단계 학습)다. 2499가 1단계, 7498이 그 이어 학습이다.
 - v1(`v1_5070`, 15000 iteration)은 보상이 책 위치만 보고 기울기를 안 봐서, 책을 기울인 채 넣는 국소해에 머물렀다(sim 성공 0, book_depth 1.68/2.0, book_lane 0.85/1.0). v2와 비교하려고 export했다(2026-11-07). 관측·행동 형식은 v2와 같다.
 - 실로봇 관찰(2026-11-07): 7498이 문을 끝까지 열기 전에 책을 넣으려 했다. sim에서도 문 약 60°에서 책이 들어가기 시작했다(책 보상 게이트가 60~80°).
-- **둘 다 sim에서 관절 약 2 rad/s로 움직인다**(행동이 매 step 0.1 rad까지). 실로봇 제어기 기본(`joint_velocity_scale` 0.10)은 j1~4 0.26 rad/s라 로봇이 정책보다 약 8배 느리게 따라간다. 노드가 시작할 때 경고를 띄운다. 정책이 학습 때 보지 못한 상태가 되므로 sim처럼 움직이지 않을 수 있다.
+- **둘 다 sim에서 관절 약 2 rad/s로 움직인다**(행동이 매 step 0.1 rad까지). **실로봇도 같은 속도로 움직인다.** 노드는 Isaac PD 모드(`isaac_relative_control`)로 제어기를 부르는데, 이 모드에서는 `joint_velocity_scale`·`max_actuator_step_rad`가 범위 검사에만 쓰이고 속도를 제한하지 않는다(2026-11-07 제어기 코드 확인). 더 느리게 하려면 느린 체크포인트(v3 Slow)를 써야 한다.
 - 7498은 sim에서 손잡이에 중앙 56 N(최대 448 N)을 썼다. 실물 UMI 파지가 미끄러질 수 있다.
 
 ## box lift와 같은 것, 다른 것
@@ -58,8 +58,7 @@ ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
 - open-door 정책은 `model_path`만 `cabinet_book_insert_open_door_upright_pretrain_model_2499.npz`로 바꾼다.
 - v1은 `model_path`만 `cabinet_book_insert_v1_model_14999.npz`로 바꾼다(문 닫힘 시작, 7498과 같음).
 - 로그 확인:
-  - `Joint speed: trained up to 2.00 rad/s ..., controller limit [0.26, ...]`
-  - 느리다는 WARN
+  - `Joint speed: up to 2.00 rad/s per joint as trained ...`
   - `121 start rows`
 - 기본값은 `load_gripper:=true`다. 그리퍼를 띄우지 않을 때만 `load_gripper:=false`를 준다.
 
@@ -84,7 +83,7 @@ ros2 run fr3_husky_nn_policy cabinet_book_insert_fk_node --ros-args \
 ros2 run fr3_husky_task_manager gripper_move --arm both --command open
 ros2 run fr3_husky_task_manager move_to_joint     # ready
 
-# closed-door 7498 (문 닫힘), 행 60
+# closed-door 7498 · v1 14999 (문 닫힘), 행 60: 두 모델의 시작 표(121행)가 같다
 ros2 run fr3_husky_task_manager move_to_joint \
   --left-target-positions -0.2898 0.4389 -0.6271 -1.8862 1.4038 2.7138 -0.6641 \
   --right-target-positions -1.4168 1.1355 1.3881 -2.4121 -2.0347 2.6719 1.6555
@@ -96,7 +95,7 @@ ros2 run fr3_husky_task_manager move_to_joint \
 ```
 
 1. 수납장을 제자리에 놓는다. 손잡이 막대가 열린 왼손 손가락 사이에 오고, 손끝이 막대 축을 약 2 cm 지나게 한다.
-   - closed-door 모델은 문을 닫은 채로 놓는다.
+   - closed-door 모델(7498, v1 14999)은 문을 닫은 채로 놓는다.
    - open-door 모델은 문을 90°까지 열고 놓는다. 이때 막대 축은 (0.473, 0.309)이다.
 2. 책을 오른손 손가락 사이에 세운다. 밑면이 책상에 닿고, 면이 base 축과 평행해야 한다.
 3. 잡는다(힘은 실물을 보고 조절).
@@ -110,7 +109,7 @@ ros2 run fr3_husky_task_manager move_to_joint \
 ## 4. 터미널 4: 입력 확인 → 시작 → 정지
 
 ```bash
-ros2 topic echo --once /cabinet_book_insert/door_angle   # 닫힘 ≈ 0, open-door ≈ 1.57
+ros2 topic echo --once /cabinet_book_insert/door_angle   # 닫힘(7498, v1) ≈ 0, open-door(2499) ≈ 1.57
 ros2 topic echo --once /cabinet_book_insert/book_pose    # 행 60이면 ≈ (0.630, -0.390, 0.156), 방향 ≈ (0, 0, 0, 1)
 ros2 service call /ppo_cabinet_book_insert_policy_node/start_policy std_srvs/srv/Trigger {}
 ```
@@ -138,9 +137,8 @@ ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
 ```
 
 - open-door 2499부터 시작한다. 문을 여는 단계가 없어 손잡이 힘 위험이 작다.
-- 속도: 기본 `joint_velocity_scale:=0.10`(j1~4 0.26 rad/s)으로 시작한다.
-  - 더 빠르게 하려면 `joint_velocity_scale:=0.19`(0.5 rad/s)를 준다.
-  - `max_actuator_step_rad`는 0.001이면 모든 관절이 1 rad/s에서 한 번 더 막힌다. 제어기는 0.01까지만 받는다.
+- 속도: 시작하자마자 관절이 최대 약 2 rad/s로 움직인다. `joint_velocity_scale`·`max_actuator_step_rad`는 이 모드에서 속도를 바꾸지 않는다.
+  - 실로봇(2026-11-07): 7498은 0.93 s에 관절 0.9 rad를 움직여 비상정지했다. v1 14999는 1.4 s에 1.4 rad를 움직이며 문을 42°까지 열다 Franka `cartesian_reflex`로 멈췄다. 로그는 `data/cabinet_book_insert/`.
 - 손잡이 힘을 잴 센서가 없다. 왼손이 손잡이에서 미끄러지거나 수납장이 밀리면 바로 정지한다.
 
 ## 확인한 것 / 못 한 것 (2026-11-06, 학습 PC)
