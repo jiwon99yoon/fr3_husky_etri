@@ -2,7 +2,8 @@
 # standard Franka fingertips, 50 x 50 x 100 mm cube. Node: ppo_liftcube_sim2real_policy_node.
 ppo_liftcube_sim2real_policy_node:
   ros__parameters:
-    joint_states_topic: /joint_states
+    joint_states_topic: /dual_fr3/joint_states                      # arm, ros2_control (1 kHz)
+    gripper_joint_states_topic: /right_franka_gripper/joint_states  # right fingers
     object_pose_topic: /object_pose   # ArUco cube centre, base frame
     base_frame: base
     command_topic: /policy_joint_command

@@ -24,6 +24,54 @@
   - 그리퍼: 노드가 franka action `/right_franka_gripper/grasp`(width 0, speed 0.1 m/s, force 30 N, epsilon 0.08)와 `/right_franka_gripper/move`(width 0.08, speed 0.1 m/s)를 직접 보낸다. 제어기의 GripperGrasp/GripperOpen과 같은 값이다. 열고 닫는 명령이 바뀔 때만 보낸다(히스테리시스 0.1).
 - 보낸 시각, accepted, result를 모두 로그에 남긴다(아래 "로그").
 - 비전 끊김 처리는 없다. `/object_pose`가 0.2 s 넘게 안 오면 세션을 멈춘다(`object_pose_timeout_s`).
+- 관절 상태는 box·캐비닛 노드와 같다. 팔은 `/dual_fr3/joint_states`(ros2_control, 1 kHz)에서 받는다.
+  - `/joint_states`는 joint_state_publisher가 팔과 그리퍼를 합쳐 30 Hz로만 내므로 쓰지 않는다.
+  - 손가락은 `/right_franka_gripper/joint_states`에서 받는다.
+
+## 관측과 실로봇 출처
+
+관측 36개는 모두 실로봇에서 얻는다. 그리퍼와 큐브 위치는 sim과 실물의 값이 다르다.
+
+| 번호 | 관측 | sim (학습) | 실로봇 출처 |
+|---|---|---|---|
+| 0~6 | 오른팔 관절 q − ready 자세 | 잡음 0.005 rad | `/dual_fr3/joint_states` (FR3 엔코더) |
+| 7~8 | 손가락 q − 0.04 | 잡음 0.005 | `/right_franka_gripper/joint_states` (폭/2) |
+| 9~15 | 오른팔 관절 속도 | 잡음 0.05 rad/s | `/dual_fr3/joint_states` velocity |
+| 16~17 | 손가락 속도 | 잡음 0.05 | 그리퍼 폭을 노드가 미분. franka_gripper는 측정 속도를 내지 않는 것으로 판단(실물 미확인) |
+| 18~20 | 큐브 중심 위치 (base) | 실제 위치 + 잡음 1 cm, 지연·끊김 없음 | ArUco `/object_pose` |
+| 21~23 | 목표 위치 | 무작위 명령 | 노드 파라미터 `target_position` |
+| 24~27 | 목표 quat | [0, 0, 0, 1] 고정 | 상수 |
+| 28~35 | 이전 행동 8 | | 노드가 기억 |
+
+### sim과 달라지는 곳
+
+| | sim | 실물 |
+|---|---|---|
+| 그리퍼 (관측 7~8, 16~17) | implicit PD(stiffness 2e3)라 약 0.1 s에 닫힘. 명령 지연 없음 | action goal → libfranka. 0.1 m/s로 움직임(손가락 하나 0.05 m/s). 8 cm → 5 cm 큐브까지 0.3 s 이상에 명령 지연이 더해짐 |
+| 큐브 위치 (관측 18~20) | 실제 위치 + 잡음 1 cm, 매 step 새 값 | ArUco 처리 지연이 있음. 쥐면 손이 마커를 가릴 수 있음 |
+| 큐브 방향 | 관측 안 함, yaw 0만 학습 | 정책이 yaw를 못 보므로 큐브를 base 축에 나란히 놓아야 함 |
+| 큐브 질량 | 0.175~0.325 kg | 90 g |
+| 힘·접촉 | 관측 안 함 | 잡았는지는 손가락 폭으로만 앎 |
+
+## 이번 실험에서 볼 것 (pick-and-place에 넣을 값)
+
+이 실험의 목적은 아래 값을 재서 pick-and-place 학습(`Isaac-PickPlace-Cube-DualFR3-UMI-v0`)의 그리퍼 모델, 비전 지연과 끊김에 넣는 것이다.
+
+| 볼 것 | 어디서 | 쓰임 |
+|---|---|---|
+| 그리퍼 명령 지연: send → accepted → 손가락이 움직이기 시작 → result | `liftcube_log_summary`의 gripper 표 (`gripper_events.csv`, `trace.csv`의 `finger_width_m`) | sim 그리퍼에 명령 지연과 닫힘 속도를 넣음 |
+| 닫힘 속도: 폭이 줄어드는 기울기, 큐브를 쥔 뒤 폭 | `trace.csv`의 `finger_width_m`, `obs_16`·`obs_17` | sim 손가락 속도 제한(현재 거의 즉시) |
+| 닫기 명령에서 큐브가 들리기까지 걸린 시간 | 요약의 `lift start` 줄 | 정책이 손가락이 다 닫히기 전에 드는지 확인. 그렇다면 sim 그리퍼를 늦춰야 함 |
+| 열기 명령 지연 (정책이 열 때만) | gripper 표의 `open` 줄 | 놓기(place) 단계 지연 |
+| 큐브 pose 지연 | 요약의 `cube age` (`object_stamp_age_ms`는 카메라 stamp부터, `object_pose_age_ms`는 노드가 받은 뒤부터) | 비전 지연 DR 범위 (box 값과 비교) |
+| 큐브 pose 끊김 | 쥔 뒤 `cube pose is stale` 종료 여부, `object_pose_age_ms` 최댓값 | 끊김 확률과 길이, 노드의 "마지막 값 유지"가 필요한지 |
+| 정지한 큐브의 위치 흔들림 | 요약의 `cube noise` 줄 (처음 1 s, 손이 닿기 전) | 관측 잡음(현재 1 cm)이 맞는지 |
+| 손가락 속도 관측이 실제로 나오는지 | `obs_16`, `obs_17`이 닫는 동안 0이 아닌지 | 미분이 제대로 되는지 |
+| tick 주기, 관절 상태 나이, 제어기 추종 오차 | 요약의 `tick`, `joint err` | 20 Hz 정책 루프가 학습과 같은지 |
+
+- shadow 실행(4번)에서는 그리퍼 명령을 보내지 않는다. 그리퍼 지연을 빼고 큐브 pose 지연과 흔들림만 본다.
+- 그리퍼 지연만 따로 보려면 정책 없이 `ros2 action send_goal /right_franka_gripper/grasp ...`를 보내고 `ros2 topic echo /right_franka_gripper/joint_states`로 폭을 볼 수도 있다.
+  - 이때는 정책 노드 로그가 남지 않으니, 시간은 `ros2 bag record /right_franka_gripper/joint_states`로 남긴다.
 
 ## 준비
 

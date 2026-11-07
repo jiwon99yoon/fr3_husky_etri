@@ -60,7 +60,21 @@ def summarize(run_dir: Path, motion_m: float) -> None:
 
     t = [_float(r["elapsed_s"]) for r in rows]
     width = [_float(r["finger_width_m"]) for r in rows]
+    # the hand needs about 1 s from the ready pose to the cube, so the cube is still standing in the first second
+    still = [[_float(r[f"obs_{i}"]) for i in (18, 19, 20)] for r in rows if _float(r["elapsed_s"]) < 1.0]
+    if len(still) > 2:
+        std = [1000 * math.sqrt(sum((p[k] - sum(q[k] for q in still) / len(still)) ** 2 for p in still) / len(still))
+               for k in range(3)]
+        print(f"cube noise std x/y/z {std[0]:.1f} / {std[1]:.1f} / {std[2]:.1f} mm over the first 1 s (sim 10 mm)")
     sends = [e for e in events if e["event"] in ("send", "would_send")]
+    z0 = _float(first["obs_20"])
+    lift_t = next((ti for ti, r in zip(t, rows) if _float(r["obs_20"]) > z0 + 0.01), math.nan)
+    if math.isfinite(lift_t):
+        grasps = [_float(e["elapsed_s"]) for e in sends if e["command"] == "grasp" and _float(e["elapsed_s"]) <= lift_t]
+        since = f", {1000 * (lift_t - grasps[-1]):.0f} ms after the last grasp command" if grasps else ""
+        print(f"lift start cube z +1 cm at {lift_t:.2f} s{since}")
+    else:
+        print("lift start cube never rose 1 cm")
     if not sends:
         print("gripper   no goals sent (policy never crossed the hysteresis)")
         return

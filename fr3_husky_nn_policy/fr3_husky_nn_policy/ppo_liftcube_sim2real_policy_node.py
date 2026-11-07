@@ -61,7 +61,9 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         share = Path(get_package_share_directory("fr3_husky_nn_policy"))
 
         self.declare_parameter("model_path", str(share / "models" / "dual_fr3_lift_sim2real100hz_model4999.npz"))
-        self.declare_parameter("joint_states_topic", "/joint_states")
+        # arm joints from ros2_control (as the box/cabinet nodes); /joint_states is the 30 Hz joint_state_publisher merge
+        self.declare_parameter("joint_states_topic", "/dual_fr3/joint_states")
+        self.declare_parameter("gripper_joint_states_topic", "/right_franka_gripper/joint_states")
         self.declare_parameter("object_pose_topic", "/object_pose")
         self.declare_parameter("base_frame", "base")
         self.declare_parameter("command_topic", "/policy_joint_command")
@@ -135,6 +137,9 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.last_status_log_ns = 0
 
         self.create_subscription(JointState, self.get_parameter("joint_states_topic").value, self._joint_state_callback, 10)
+        self.create_subscription(
+            JointState, self.get_parameter("gripper_joint_states_topic").value, self._joint_state_callback, 10
+        )
         self.create_subscription(PoseStamped, self.get_parameter("object_pose_topic").value, self._object_pose_callback, 10)
         command_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.command_publisher = self.create_publisher(PolicyJointCommand, self.get_parameter("command_topic").value, command_qos)
@@ -179,7 +184,8 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
                 continue
             previous, previous_ns = self.joint_position[out], self.joint_update_ns[out]
             self.joint_position[out] = float(msg.position[i])
-            if i < len(msg.velocity) and np.isfinite(msg.velocity[i]):
+            # fingers: always differentiate the width (franka_gripper does not report a finger velocity)
+            if out < 14 and i < len(msg.velocity) and np.isfinite(msg.velocity[i]):
                 self.joint_velocity[out] = float(msg.velocity[i])
             elif np.isfinite(previous) and previous_ns > 0 and (now_ns - previous_ns) > 100_000:
                 self.joint_velocity[out] = (self.joint_position[out] - previous) / ((now_ns - previous_ns) * 1e-9)
@@ -345,7 +351,7 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         configured = str(self.get_parameter("log_root").value).strip()
         log_root = Path(configured).expanduser() if configured else Path(__file__).resolve().parents[2] / "data"
         names = (
-            "joint_states_topic", "object_pose_topic", "base_frame", "gripper_action_ns", "policy_rate_hz",
+            "joint_states_topic", "gripper_joint_states_topic", "object_pose_topic", "base_frame", "gripper_action_ns", "policy_rate_hz",
             "joint_state_timeout_s", "object_pose_timeout_s", "command_timeout_s", "max_duration_s",
             "max_policy_target_delta_rad", "ready_tolerance_rad", "control_gripper", "gripper_hysteresis",
             "grasp_width_m", "grasp_speed_mps", "grasp_force_n", "grasp_epsilon_m", "open_width_m", "open_speed_mps",
