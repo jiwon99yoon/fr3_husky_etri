@@ -1,15 +1,17 @@
 # dual FR3 캐비닛 책 넣기 실로봇 실험 순서 (2026-11-06)
 
-배치(책상 높이, 수납장·책 위치, link0 기준 좌표)는 [dual_fr3_cabinet_book_real_setup.md](dual_fr3_cabinet_book_real_setup.md), 노드 계약과 export는 [../fr3_husky_nn_policy/CABINET_BOOK_INSERT_DEPLOYMENT.md](../fr3_husky_nn_policy/CABINET_BOOK_INSERT_DEPLOYMENT.md)에 있다.
+배치(책상 높이, 수납장·책 위치, link0 기준 좌표)는 [dual_fr3_cabinet_book_real_setup.md](dual_fr3_cabinet_book_real_setup.md)(45 cm 책상)와 [dual_fr3_cabinet_book_layout_75cm.md](dual_fr3_cabinet_book_layout_75cm.md)(75 cm 책상), 노드 계약과 export는 [../fr3_husky_nn_policy/CABINET_BOOK_INSERT_DEPLOYMENT.md](../fr3_husky_nn_policy/CABINET_BOOK_INSERT_DEPLOYMENT.md)에 있다.
 
 ## 정책 (`fr3_husky_nn_policy/models/`)
 
 | 파일 | 시작 상태 | sim 결과 |
 |---|---|---|
+| `cabinet_book_insert_75cm_door_first_model_2998.npz` (**75 cm 책상**) | 문 닫힘 | 121개 중 121 성공, 책이 입구에 닿을 때 문 중앙 97° (최소 92°). 아래 "75 cm 책상: DoorFirst 2998" 절 |
 | `cabinet_book_insert_open_door_upright_pretrain_model_2499.npz` | 문 90° 열림, 왼손이 열린 문의 손잡이를 잡음 | 영상 3/3 성공, 약 1.5 s에 넣음, 끝 기울기 2.5°, 깊이 11.8 cm |
 | `cabinet_book_insert_closed_door_stage2_model_7498.npz` | 문 닫힘 | 121개 시작 위치 중 120 성공, 첫 성공 중앙 1.2 s, 끝 기울기 중앙 4.1°, 깊이 12.9 cm |
 | `cabinet_book_insert_v1_model_14999.npz` | 문 닫힘 | 121개 중 성공 0 (책을 약 31° 기울인 채 깊이 12.6 cm까지 넣음), 비교용 |
 
+- 2998은 75 cm 책상 전용이다. 나머지 셋(2499, 7498, v1)은 45 cm 책상 전용이다.
 - 2499, 7498은 v2(codex 2단계 학습)다. 2499가 1단계, 7498이 그 이어 학습이다.
 - v1(`v1_5070`, 15000 iteration)은 보상이 책 위치만 보고 기울기를 안 봐서, 책을 기울인 채 넣는 국소해에 머물렀다(sim 성공 0, book_depth 1.68/2.0, book_lane 0.85/1.0). v2와 비교하려고 export했다(2026-11-07). 관측·행동 형식은 v2와 같다.
 - 실로봇 관찰(2026-11-07): 7498이 문을 끝까지 열기 전에 책을 넣으려 했다. sim(121개 시작 위치, 결정적 행동)에서도 같고, v1도 마찬가지다(아래 표).
@@ -42,7 +44,7 @@
    ```bash
    cd ~/jw_ws && colcon build --symlink-install --packages-select fr3_husky_nn_policy && source install/setup.bash
    ```
-3. 배치를 맞춘다: 책상 윗면은 **팔 장착면 + 0.045 m**, 수납장 밑면 중심 (0.950, 0.100), 경첩 축 (0.7635, 0.2555), 손잡이 막대 축 (0.710, −0.035). 자세한 것은 배치 문서.
+3. 배치를 맞춘다(45 cm 책상. 75 cm 책상은 아래 "75 cm 책상: DoorFirst 2998" 절): 책상 윗면은 **팔 장착면 + 0.045 m**, 수납장 밑면 중심 (0.950, 0.100), 경첩 축 (0.7635, 0.2555), 손잡이 막대 축 (0.710, −0.035). 자세한 것은 배치 문서.
    - 실물 장착면은 바닥 위 약 0.38 m라, 학습 배치는 책상 0.425 m다. 45 cm 책상이면 2.5 cm 높다. 책과 수납장이 함께 올라가 상대 위치는 같으니 그대로 시험한다. 다만 책 pose(FK)의 z는 실제보다 2.5 cm 낮게 나온다(배치 문서 "바닥 높이 주의").
 
 **모든 터미널 공통**
@@ -147,6 +149,129 @@ ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
 - 속도: 시작하자마자 관절이 최대 약 2 rad/s로 움직인다. `joint_velocity_scale`·`max_actuator_step_rad`는 이 모드에서 속도를 바꾸지 않는다.
   - 실로봇(2026-11-07): 7498은 0.93 s에 관절 0.9 rad를 움직여 비상정지했다. v1 14999는 1.4 s에 1.4 rad를 움직이며 문을 42°까지 열다 Franka `cartesian_reflex`로 멈췄다. 로그는 `data/cabinet_book_insert/`.
 - 손잡이 힘을 잴 센서가 없다. 왼손이 손잡이에서 미끄러지거나 수납장이 밀리면 바로 정지한다.
+
+## 75 cm 책상: DoorFirst 2998 (2026-11-07)
+
+실험실 책상(윗면 = 팔 장착면 + 0.345 m, 실측도 같음)에서 쓰는 정책이다. 배치는 [dual_fr3_cabinet_book_layout_75cm.md](dual_fr3_cabinet_book_layout_75cm.md)에 있다. 순서(0~5)는 위와 같고, **모델, FK 보정값, 시작 자세, 확인 값만 다르다.** 45 cm 모델(2499, 7498, v1)은 75 cm 책상에서 쓰지 않는다.
+
+### 정책과 sim 결과
+
+- 파일: `cabinet_book_insert_75cm_door_first_model_2998.npz`
+- task `Isaac-Cabinet-BookInsert-DualFR3-UMI-Table75-DoorFirst-v0`
+- 학습: 75 cm OpenDoor(문 90° 시작) 1000 iteration(`opendoor_75cm_5070` model_999) 뒤 DoorFirst로 2000 iteration 이어서 학습했다(run `door_first_75cm_5070`, 5070 PC).
+- DoorFirst: 문이 80~90° 열릴 때까지 책 중심이 대기선 y −0.14(수납장 오른쪽 벽에서 오른쪽으로 4.5 cm) 오른쪽에 있어야 한다(`book_wait` 벌점). 성공에는 문 85° 이상이 필요하다.
+- 책 무게는 학습 때 0.15~0.30 kg으로 무작위화했다(실물 0.25 kg).
+- sim 결과 (121개 시작 위치, 결정적 행동, 12 s):
+
+| | 값 |
+|---|---|
+| 성공 | 121/121 (끝까지 유지) |
+| 문 85° 도달 | 중앙 1.15 s (1.05~1.25 s) |
+| 책 앞면이 입구에 닿을 때 | 중앙 1.30 s, 문 중앙 97° (92~100°) |
+| 책 중심이 입구를 지날 때 문 | 중앙 104° (101~107°) |
+| 문 최대 | 111° |
+| 책 기울기 | 입구에서 중앙 7° (최대 22°), 끝 8° |
+| 깊이 | 중앙 12.7 cm (12.5~12.8 cm) |
+
+- 7498은 책이 입구에 닿을 때 문이 37°였다. 2998은 문을 다 연 뒤 책이 들어간다.
+- 속도는 7498과 같다. 관절이 최대 약 2 rad/s로 움직여, 1.3 s 안에 문을 97°까지 연다.
+- 75 cm open-door 정책(1단계 model_999)은 export하지 않았다.
+
+### 45 cm와 다른 값
+
+| | 45 cm (2499, 7498, v1) | **75 cm (2998)** |
+|---|---|---|
+| 책상 윗면 (base z) | +0.045 | **+0.345** (실물 바닥에서 약 0.725 m) |
+| 수납장 밑면 중심 (base x, y) | (0.950, 0.100) | **(0.850, 0.100)** |
+| 손잡이 막대 축 (문 닫힘, base x, y) | (0.710, −0.035) | **(0.610, −0.035)** |
+| FK `hinge_position_base` | [0.7635, 0.2555, 0.24] | **[0.665, 0.2555, 0.54]** |
+| FK `left_tcp_closed_position_base` | [0.7241, −0.035, 0.2259] | **[0.6241, −0.035, 0.5259]** |
+| 행 60 책 중심 (`book_pose`) | (0.630, −0.390, 0.156) | **(0.630, −0.390, 0.456)** |
+| 책 목표 중심 | (0.892, 0.060, 0.240) | **(0.795, 0.060, 0.540)** |
+
+- 손이 책과 손잡이를 잡는 방식은 같다. 그래서 FK 노드의 손-책 변환과 손-손잡이 변환은 그대로 쓴다.
+
+### 실행
+
+준비(git pull, 빌드)는 위 0번과 같다. 책상과 수납장은 위 표의 75 cm 값으로 놓는다.
+
+**터미널 1: 정책 노드 (shadow)**
+
+```bash
+ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
+  model_path:=$PWD/fr3_husky_nn_policy/models/cabinet_book_insert_75cm_door_first_model_2998.npz \
+  shadow_mode:=true launch_move_group:=true
+```
+
+- 로그에서 `121 start rows`와 `door_first_75cm_5070`을 확인한다.
+
+**터미널 2: FK 노드 (75 cm 보정값)**
+
+```bash
+ros2 run fr3_husky_nn_policy cabinet_book_insert_fk_node --ros-args \
+  --params-file $PWD/fr3_husky_nn_policy/config/dual_fr3_cabinet_book_insert_fk.yaml \
+  -p hinge_position_base:="[0.665, 0.2555, 0.54]" \
+  -p left_tcp_closed_position_base:="[0.6241, -0.035, 0.5259]"
+```
+
+- 실물을 재서 다르면 바꾼다. `left_tcp_closed_position_base`는 문을 닫고 왼손이 손잡이를 잡은 상태의 `/cabinet_book_insert/left_tcp_pose`다.
+
+**터미널 3: 시작 자세 (행 60, 문 닫힘), 수납장과 책을 놓고 잡기**
+
+```bash
+ros2 run fr3_husky_task_manager move_to_joint     # ready
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions -0.4463 -0.1901 -0.4999 -1.8995 0.3425 2.4281 0.1574 \
+  --right-target-positions 0.7872 -0.4824 -0.5670 -2.3592 -0.0158 2.6981 0.4468
+```
+
+1. 팔을 옮기는 동안 수납장과 책을 치워 둔다.
+2. 수납장을 문 닫힌 채로 놓는다. 손잡이 막대가 열린 왼손 손가락 사이에 와야 한다.
+3. 책을 오른손 손가락 사이에 세운다(밑면이 책상에 닿고, 면이 base 축과 평행).
+4. 양손으로 잡는다. 아래는 franka action을 직접 부르는 명령이다. `gripper_move`는 이 저장소에 없는 `GripperCommand` action을 부른다(11-07 lift 작업 때 확인).
+   ```bash
+   ros2 action send_goal /left_franka_gripper/grasp franka_msgs/action/Grasp \
+     "{width: 0.0, epsilon: {inner: 0.08, outer: 0.08}, speed: 0.05, force: 30.0}"
+   ros2 action send_goal /right_franka_gripper/grasp franka_msgs/action/Grasp \
+     "{width: 0.0, epsilon: {inner: 0.08, outer: 0.08}, speed: 0.05, force: 30.0}"
+   # 풀 때
+   ros2 action send_goal /left_franka_gripper/move franka_msgs/action/Move "{width: 0.08, speed: 0.05}"
+   ros2 action send_goal /right_franka_gripper/move franka_msgs/action/Move "{width: 0.08, speed: 0.05}"
+   ```
+
+**터미널 4: 입력 확인 → 시작 → 정지**
+
+```bash
+ros2 topic echo --once /cabinet_book_insert/door_angle   # ≈ 0
+ros2 topic echo --once /cabinet_book_insert/book_pose    # ≈ (0.630, -0.390, 0.456), 방향 ≈ (0, 0, 0, 1)
+ros2 service call /ppo_cabinet_book_insert_policy_node/start_policy std_srvs/srv/Trigger {}
+ros2 service call /ppo_cabinet_book_insert_policy_node/stop_policy std_srvs/srv/Trigger {}   # 따로 보낸다
+```
+
+- 거부 메시지와 로그 위치는 위 4번과 같다.
+- `book_pose` z가 0.156 근처면 45 cm 모델이나 45 cm 값이 섞인 것이다.
+
+**명령 모드**
+
+```bash
+ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
+  model_path:=$PWD/fr3_husky_nn_policy/models/cabinet_book_insert_75cm_door_first_model_2998.npz \
+  shadow_mode:=false launch_move_group:=true
+```
+
+- 비상정지를 손에 둔다. 시작하고 1.3 s 안에 문이 97°까지 열린다.
+- 문은 111°까지 열린다. 문이 열리는 쪽(로봇 왼쪽 앞, 책상 앞 모서리 밖)을 비워 둔다.
+- 왼손이 손잡이에서 미끄러지거나 수납장이 밀리면 바로 정지한다.
+- 볼 것: 문이 85° 넘게 열리기 전에 책이 대기선(y −0.14)을 넘는지. 넘으면 7498과 같은 문제다.
+
+### 확인한 것 / 못 한 것 (2026-11-07, 학습 PC)
+
+- 확인
+  - NPZ에 든 시작 표 121행, 행 60 관절값, 책 목표 (0.795, 0.06, 0.54)가 75 cm 배치 문서와 같다.
+  - sim 평가는 위 표와 같다.
+- 못 한 것
+  - 2998로 FK 노드와 정책 노드(shadow)를 학습 PC에서 띄워 보지 않았다. 45 cm 7498로만 확인했다.
+  - 실로봇에서 shadow부터 확인한다.
 
 ## 확인한 것 / 못 한 것 (2026-11-06, 학습 PC)
 
