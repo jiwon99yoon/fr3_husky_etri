@@ -71,6 +71,28 @@ python scripts/tools/draw_cabinet_book_workspace.py --viz none \
 
 ![로봇 뒤에서 (+x 방향으로)](figures/cabinet_book_75cm_workspace_back.png)
 
+## 책 시작 범위 (수납장 기준, 2026-11-07)
+
+학습(Table75-OpenDoor, Table75-DoorFirst)에서 에피소드마다 책 시작 위치를 `start_table_75cm.npz`의 121행(11 x 11, 2 cm 간격) 중 하나로 균일하게 뽑는다. 행 사이 연속 노이즈나 yaw DR은 없다. 책은 세워 두고 축은 base와 평행하다(두께 3 cm가 좌우).
+
+| 기준 | 책 중심 범위 |
+|---|---|
+| 수납장 오른쪽 바깥 벽에서 오른쪽으로 | 19.5 ~ 39.5 cm (책 옆면까지는 18 ~ 38 cm) |
+| 수납장 바깥 앞면에서 안쪽(+x)으로 | −12.5 ~ +7.5 cm (앞면보다 12.5 cm 앞 ~ 7.5 cm 뒤) |
+| 수납장 중심에서 (dx, dy) | −32 ~ −12, −59 ~ −39 cm |
+| base frame (x, y) | 0.53 ~ 0.73, −0.49 ~ −0.29 m |
+
+- 목표는 앞면에서 14 cm 안쪽(입구에서 12 cm), 오른쪽 벽에서 왼쪽으로 15.5 cm, 책상 위 19.5 cm다.
+- 대기선(DoorFirst)은 오른쪽 벽에서 오른쪽으로 4.5 cm다. 문이 열리기 전에는 책 중심이 이 선 오른쪽에 있어야 한다. 시작 범위는 모두 그 오른쪽이다.
+- sim 책상은 x 0.40 ~ 1.25, y ±0.60(0.85 x 1.20 m)이다. 책 시작 범위가 올라가도록 넓혀 둔 것이고 실물 책상 크기와 다르다.
+
+```bash
+# dual_fr3_lab (Isaac Sim 없이 matplotlib만)
+python scripts/tools/draw_cabinet_book_start_range.py --out ~/etri_ws/src/fr3_husky_etri/docs/figures/cabinet_book_75cm_book_start_range.png
+```
+
+![책 시작 범위 (수납장 기준)](figures/cabinet_book_75cm_book_start_range.png)
+
 - 위·옆 그림은 멀리서 망원으로 찍어 거의 정투영이다. 눈금(x, y, z)을 깊이와 관계없이 읽어도 된다. 뒤 그림은 원근 그림이라 눈금이 없다.
 - 화살표: x 빨강, y 초록, z 파랑, 길이 0.25 m. L0 / R0은 link0 원점이고, 빨간 화살표가 각 link0의 x축이다(yaw ±30°).
 - 흰색 사각형은 책상 윗면, 갈색은 수납장(점선은 입구)이다. 노랑 세로선은 경첩 축이다.

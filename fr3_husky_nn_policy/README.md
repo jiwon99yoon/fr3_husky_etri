@@ -96,6 +96,14 @@ ros2 service call /ppo_liftcube_policy_node/start_policy std_srvs/srv/Trigger {}
 ros2 service call /ppo_liftcube_policy_node/stop_policy std_srvs/srv/Trigger {}
 ~~~
 
+### Isaac Lab 3.0 Sim2Real-100Hz (2026-11-07)
+
+- 모델: models/dual_fr3_lift_sim2real100hz_model4999.npz (36 → 256 → 128 → 64 → 8, tanh)
+- Launch: dual_fr3_lift_sim2real_policy.launch.py, 노드: ppo_liftcube_sim2real_policy_node
+- 제어기 Isaac PD(dual, 왼팔 고정), 그리퍼는 노드가 /right_franka_gripper/{grasp,move}로 직접 보냄
+- 로그 요약: `ros2 run fr3_husky_nn_policy liftcube_log_summary`
+- 실험 순서: ../docs/dual_fr3_liftcube_sim2real_experi_step.md
+
 ## Reach
 
 ### 동작과 모델

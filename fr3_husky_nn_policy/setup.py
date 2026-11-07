@@ -31,6 +31,8 @@ setup(
     entry_points={
         "console_scripts": [
             "ppo_liftcube_policy_node = fr3_husky_nn_policy.ppo_liftcube_policy_node:main",
+            "ppo_liftcube_sim2real_policy_node = fr3_husky_nn_policy.ppo_liftcube_sim2real_policy_node:main",
+            "liftcube_log_summary = fr3_husky_nn_policy.liftcube_log_summary:main",
             "ppo_reach_policy_node = fr3_husky_nn_policy.ppo_reach_policy_node:main",
             "ppo_boxlift_policy_node = fr3_husky_nn_policy.ppo_boxlift_policy_node:main",
             "box_pose_vision_sim = fr3_husky_nn_policy.box_pose_vision_sim:main",

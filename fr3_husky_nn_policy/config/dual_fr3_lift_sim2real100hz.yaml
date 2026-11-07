@@ -1,0 +1,46 @@
+# Isaac Lab 3.0 cube lift Sim2Real-100Hz (dual_fr3_lab Isaac-Lift-Cube-DualFR3-Sim2Real-100Hz-v0, model_4999),
+# standard Franka fingertips, 50 x 50 x 100 mm cube. Node: ppo_liftcube_sim2real_policy_node.
+ppo_liftcube_sim2real_policy_node:
+  ros__parameters:
+    joint_states_topic: /joint_states
+    object_pose_topic: /object_pose   # ArUco cube centre, base frame
+    base_frame: base
+    command_topic: /policy_joint_command
+    control_action: /fr3_policy_control
+    gripper_action_ns: /right_franka_gripper
+
+    policy_rate_hz: 20.0
+    joint_state_timeout_s: 0.15
+    object_pose_timeout_s: 0.20     # the session stops if the cube pose is older than this
+    command_timeout_s: 0.15
+    max_duration_s: 8.0             # trained episode length
+
+    max_policy_target_delta_rad: 0.20
+    joint_limit_margin_rad: 0.02
+    ready_tolerance_rad: 0.20
+    min_open_finger_width_m: 0.07
+    control_gripper: true
+    gripper_hysteresis: 0.10
+    grasp_width_m: 0.0
+    grasp_speed_mps: 0.1
+    grasp_force_n: 30.0
+    grasp_epsilon_m: 0.08
+    open_width_m: 0.08
+    open_speed_mps: 0.1
+
+    # Safe defaults: inference and logging run, but no command is published.
+    shadow_mode: true
+    auto_start: false
+
+    # Training ranges, base frame (docs/dual_fr3_liftcube_real_setup.md). The real table front edge is x 0.40, so
+    # put the cube at x >= 0.45.
+    target_position: [0.45, -0.30, 0.50]
+    target_min: [0.35, -0.45, 0.45]
+    target_max: [0.55, -0.15, 0.60]
+    object_start_min: [0.36, -0.38, 0.365]
+    object_start_max: [0.54, -0.12, 0.425]
+    object_workspace_min: [0.20, -0.60, 0.25]
+    object_workspace_max: [0.70, 0.10, 0.80]
+
+    log_root: ""                    # empty: <package source>/data
+    log_task_name: dual_fr3_liftcube_sim2real100hz
