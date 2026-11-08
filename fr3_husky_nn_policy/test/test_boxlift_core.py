@@ -14,6 +14,7 @@ from fr3_husky_nn_policy.boxlift_core import (
     BoxLiftManifest,
     build_observation,
     canonicalize_box_quat,
+    box_goal_error,
     check_goal_settings,
     check_start_conditions,
     load_boxlift_policy,
@@ -208,6 +209,22 @@ def test_goal_xy_absolute_range():
     raw["goal"]["xy_offset_range_base"] = {"x": [0.0, 0.0], "y": [0.0, 0.0]}
     with pytest.raises(ValueError, match="both"):
         BoxLiftManifest.from_dict(raw)
+
+
+def test_goal_xy_range_center_reference(manifest):
+    raw = manifest_dict()
+    raw["goal"]["xy_range_base"] = {"x": [0.40, 0.50], "y": [-0.10, 0.10]}
+    absolute = BoxLiftManifest.from_dict(raw)
+    # the goal no longer follows the box: center (0.45, 0) + offset wherever the box starts
+    for start in ([0.46, 0.02], [0.52, -0.08]):
+        np.testing.assert_allclose(make_goal(start, 0.2, absolute, reference="range_center")[:3], [0.45, 0.0, 0.2])
+        np.testing.assert_allclose(make_goal(start, 0.2, absolute, [0.05, -0.1], "range_center")[:2], [0.50, -0.10])
+    with pytest.raises(ValueError, match="from the goal range center"):
+        check_goal_settings(0.2, [0.06, 0.0], absolute, "range_center")
+    with pytest.raises(ValueError, match="goal_xy_reference must be"):
+        check_goal_settings(0.2, [0.0, 0.0], absolute, "center")
+    with pytest.raises(ValueError, match="absolute goal range"):
+        make_goal([0.46, 0.02], 0.2, manifest, reference="range_center")
 
 
 def test_build_observation_rejects_bad_inputs(manifest):
@@ -430,3 +447,38 @@ def test_core_reproduces_recorded_isaac_policy_io():
             if not trace["done"][t, n]:
                 target, _ = process_action(trace["action"][t, n], q, manifest)
                 np.testing.assert_allclose(target, trace["held_target"][t, n], atol=1e-5)
+
+
+def test_box_goal_error_position_and_rpy():
+    goal = np.concatenate([[0.45, 0.0, 0.15], GOAL_QUAT_XYZW])
+    level = box_goal_error([0.47, -0.01, 0.12], yaw_quat(0.1), goal, start_quat_b=yaw_quat(0.04))
+    np.testing.assert_allclose(level["error_xyz_m"], [0.02, -0.01, -0.03])
+    assert level["error_m"] == pytest.approx(np.sqrt(0.02**2 + 0.01**2 + 0.03**2), abs=1e-4)
+    assert level["tilt_deg"] == pytest.approx(0.0, abs=1e-6)
+    np.testing.assert_allclose(level["rpy_error_deg"], [0.0, 0.0, np.degrees(0.1)], atol=0.01)
+    np.testing.assert_allclose(level["rpy_change_deg"], [0.0, 0.0, np.degrees(0.06)], atol=0.01)
+    pitched = box_goal_error([0.45, 0.0, 0.15], [0.0, np.sin(0.1), 0.0, np.cos(0.1)], goal)
+    assert pitched["error_m"] == 0.0 and "rpy_change_deg" not in pitched
+    assert pitched["tilt_deg"] == pytest.approx(np.degrees(0.2), abs=0.01)
+    np.testing.assert_allclose(pitched["rpy_error_deg"], [0.0, np.degrees(0.2), 0.0], atol=0.01)
+    # a detector reporting the half-turned box does not change the yaw change
+    flipped = quat_mul(yaw_quat(0.1), [0, 0, 1, 0])
+    change = box_goal_error([0.45, 0, 0.15], flipped, goal, yaw_quat(0.04))["rpy_change_deg"]
+    assert change[2] == pytest.approx(np.degrees(0.06), abs=0.01)
+
+
+def test_append_session_result_writes_header_once(tmp_path):
+    from fr3_husky_nn_policy.boxlift_logger import append_session_result
+    path = tmp_path / "experi_result" / "task" / "results.csv"
+    append_session_result(path, {"session": "a", "error_x": 0.01})
+    append_session_result(path, {"session": "b", "error_x": -0.02})
+    assert path.read_text().splitlines() == ["session,error_x", "a,0.01", "b,-0.02"]
+
+
+def test_run_logger_accepts_runtime_array_parameters(tmp_path):
+    # `ros2 param set ... goal_xy_offset_m "[0.0, -0.05]"` makes rclpy return array.array('d'), not a list
+    import array
+    from fr3_husky_nn_policy.boxlift_logger import BoxLiftRunLogger
+    logger = BoxLiftRunLogger(tmp_path, "task", {"parameters": {"goal_xy_offset_m": array.array("d", [0.0, -0.05])}})
+    logger.finalize("test")
+    assert json.loads(logger.metadata_path.read_text())["parameters"]["goal_xy_offset_m"] == [0.0, -0.05]

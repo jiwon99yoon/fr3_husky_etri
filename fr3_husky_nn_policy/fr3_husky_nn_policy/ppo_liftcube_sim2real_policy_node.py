@@ -10,7 +10,18 @@ Contract (same as box/cabinet Sim2Real nodes):
 - gripper action: close when a[7] < 0 (with hysteresis). The controller's dual path does not drive grippers, so this
   node sends ``franka_msgs`` Grasp/Move goals itself and logs every goal and answer (gripper delay measurement).
 
-Logs go to ``<log_root>/<log_task_name>/<stamp>/`` (``liftcube_logger``).
+Goal (same interface as the box-lift node): start_policy latches reference x/y + ``goal_xy_offset_m`` and the
+absolute height ``goal_z_m`` (base frame). ``goal_xy_reference`` is ``range_center`` (default, the center of the
+trained goal range: training samples the goal uniformly in that box, independent of the cube) or ``cube_start``
+(the cube x/y at start_policy). All three can be changed with ``ros2 param set`` while IDLE; a goal outside the
+trained range (``target_min``/``target_max``) is refused, and the IDLE goal preview marker is red then.
+
+Cube pose input: ``geometry_msgs/PoseStamped`` of the CUBE CENTER in any frame with a TF to ``base``
+(``object_position_offset_m`` is added in base, for a vision z bias). Only the position is observed.
+
+Logs go to ``<log_root>/<log_task_name>/<stamp>/`` (``liftcube_logger``). At the session end the final cube vs
+goal error is written to that metadata.json and appended as one row to
+``<result_root>/<log_task_name>/results.csv`` (default ``<repo>/experi_result``).
 """
 
 from __future__ import annotations
@@ -25,13 +36,19 @@ from ament_index_python.packages import get_package_share_directory
 from franka_msgs.action import Grasp, Move
 from fr3_husky_msgs.action import RunPolicyControl
 from fr3_husky_msgs.msg import PolicyJointCommand
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point, PoseStamped
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.time import Time as RosTime
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
+from tf2_ros import Buffer, TransformException, TransformListener
+from visualization_msgs.msg import Marker, MarkerArray
 
+from .boxlift_core import box_goal_error, transform_pose
+from .boxlift_logger import append_session_result
 from .liftcube_logger import LiftCubeRunLogger
 from .numpy_actor import NumpyMLPActor
 from .observation import DEFAULT_RIGHT_JOINT_POSITION, DUAL_ARM_JOINT_NAMES, build_liftcube_observation
@@ -54,6 +71,11 @@ _LEGACY_JOINT_VELOCITY_SCALE = 0.10
 _LEGACY_JOINT_ACCELERATION_SCALE = 0.20
 _LEGACY_RELATIVE_TARGET_REFRESH_HZ = 1000.0
 
+GOAL_XY_REFERENCES = ("range_center", "cube_start")
+GOAL_PARAMETERS = ("goal_z_m", "goal_xy_offset_m", "goal_xy_reference")
+TRAINED_CUBE_START_XY = ((0.37, 0.53), (-0.37, -0.13))  # model yaml training_ranges_base
+TABLE_TOP_Z = 0.345
+
 
 class PPOLiftCubeSim2RealPolicyNode(Node):
     def __init__(self):
@@ -65,12 +87,16 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.declare_parameter("joint_states_topic", "/dual_fr3/joint_states")
         self.declare_parameter("gripper_joint_states_topic", "/right_franka_gripper/joint_states")
         self.declare_parameter("object_pose_topic", "/object_pose")
+        self.declare_parameter("object_position_offset_m", [0.0, 0.0, 0.0])  # added to the vision cube centre (base)
+        self.declare_parameter("object_size_m", [0.05, 0.05, 0.10])  # RViz marker only
         self.declare_parameter("base_frame", "base")
         self.declare_parameter("command_topic", "/policy_joint_command")
         self.declare_parameter("control_action", "/fr3_policy_control")
         self.declare_parameter("gripper_action_ns", "/right_franka_gripper")
         self.declare_parameter("policy_rate_hz", 20.0)
-        self.declare_parameter("joint_state_timeout_s", 0.15)
+        self.declare_parameter("joint_state_timeout_s", 0.15)  # arm joints (/dual_fr3/joint_states, 1 kHz)
+        # fingers: franka_gripper joint_states arrive at ~10-20 Hz with gaps up to ~0.15 s (2026-11-07 real runs)
+        self.declare_parameter("gripper_joint_state_timeout_s", 0.5)
         self.declare_parameter("object_pose_timeout_s", 0.20)
         self.declare_parameter("command_timeout_s", 0.15)
         self.declare_parameter("max_duration_s", 8.0)  # trained episode length
@@ -91,7 +117,10 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.declare_parameter("auto_start", False)
         # training ranges (base frame): goal x 0.35-0.55, y -0.45--0.15, z 0.45-0.60; cube centre x 0.37-0.53,
         # y -0.37--0.13, z table + 0.05 (0.395)
-        self.declare_parameter("target_position", [0.45, -0.30, 0.50])
+        # goal = reference x/y + goal_xy_offset_m, z = goal_z_m (absolute, base); must stay inside target_min/max
+        self.declare_parameter("goal_z_m", 0.50)
+        self.declare_parameter("goal_xy_offset_m", [0.0, 0.0])
+        self.declare_parameter("goal_xy_reference", "range_center")  # or cube_start
         self.declare_parameter("target_min", [0.35, -0.45, 0.45])
         self.declare_parameter("target_max", [0.55, -0.15, 0.60])
         self.declare_parameter("object_start_min", [0.36, -0.38, 0.365])
@@ -100,10 +129,14 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.declare_parameter("object_workspace_max", [0.70, 0.10, 0.80])
         self.declare_parameter("log_root", "")
         self.declare_parameter("log_task_name", "dual_fr3_liftcube_sim2real100hz")
+        # per-session summary CSV (final cube vs goal); "" = <repo>/experi_result
+        self.declare_parameter("result_root", "")
 
         self.base_frame = str(self.get_parameter("base_frame").value)
         self.shadow_mode = bool(self.get_parameter("shadow_mode").value)
         self.actor = NumpyMLPActor(self.get_parameter("model_path").value)
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
+        self._check_goal_settings(goal_z, goal_xy_offset, goal_reference)
         if self.actor.input_dim != 36 or self.actor.output_dim != 8:
             raise ValueError(f"cube lift needs a 36->8 actor, got {self.actor.input_dim}->{self.actor.output_dim}")
         if self.actor.output_activation != "tanh":
@@ -140,6 +173,8 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.create_subscription(
             JointState, self.get_parameter("gripper_joint_states_topic").value, self._joint_state_callback, 10
         )
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=False)
         self.create_subscription(PoseStamped, self.get_parameter("object_pose_topic").value, self._object_pose_callback, 10)
         command_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.command_publisher = self.create_publisher(PolicyJointCommand, self.get_parameter("command_topic").value, command_qos)
@@ -149,6 +184,13 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.move_client = ActionClient(self, Move, f"{ns}/move")
         self.create_service(Trigger, "~/start_policy", self._start_service)
         self.create_service(Trigger, "~/stop_policy", self._stop_service)
+        # RViz: goal (latched; IDLE preview, then the latched goal), the cube as the policy sees it, trained ranges
+        latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.goal_marker_publisher = self.create_publisher(Marker, "~/goal_marker", latched)
+        self.cube_marker_publisher = self.create_publisher(Marker, "~/cube_marker", 1)
+        self.range_marker_publisher = self.create_publisher(MarkerArray, "~/range_markers", latched)
+        self.range_marker_publisher.publish(self._range_markers())
+        self.add_on_set_parameters_callback(self._on_set_parameters)
 
         rate = float(self.get_parameter("policy_rate_hz").value)
         if rate <= 0.0:
@@ -156,8 +198,59 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.timer = self.create_timer(1.0 / rate, self._tick)
         self.get_logger().info(
             f"Loaded {self.actor.model_path} (36->8 tanh, source {self.actor.source_sha256[:12]}...), "
-            f"mode={'SHADOW' if self.shadow_mode else 'COMMAND'}, rate={rate:.1f} Hz, gripper goals on {ns}"
+            f"mode={'SHADOW' if self.shadow_mode else 'COMMAND'}, rate={rate:.1f} Hz, gripper goals on {ns}, "
+            f"goal z {goal_z:.3f} m, goal xy {goal_reference} + {goal_xy_offset.tolist()} m"
         )
+
+    # ------------------------------------------------------------------ goal settings
+    def _goal_settings(self) -> tuple[float, np.ndarray, str]:
+        """Current goal_z_m, goal_xy_offset_m, goal_xy_reference (read at every start_policy and IDLE preview)."""
+        return (float(self.get_parameter("goal_z_m").value),
+                np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64),
+                str(self.get_parameter("goal_xy_reference").value))
+
+    def _goal_range(self) -> tuple[np.ndarray, np.ndarray]:
+        return self._vector_parameter("target_min"), self._vector_parameter("target_max")
+
+    def _check_goal_settings(self, goal_z, xy_offset, reference) -> None:
+        offset = np.asarray(xy_offset, dtype=np.float64)
+        if offset.shape != (2,) or not np.all(np.isfinite(offset)):
+            raise ValueError(f"goal_xy_offset_m must be two finite values, got {xy_offset!r}")
+        if reference not in GOAL_XY_REFERENCES:
+            raise ValueError(f"goal_xy_reference must be one of {GOAL_XY_REFERENCES}, got {reference!r}")
+        lo, hi = self._goal_range()
+        if not (lo[2] <= float(goal_z) <= hi[2]):
+            raise ValueError(f"goal_z_m {float(goal_z):.3f} outside the trained goal z [{lo[2]:.2f}, {hi[2]:.2f}]")
+        if reference == "range_center":  # fixed point: check the goal itself; cube_start is checked at start
+            self._make_goal(None, goal_z, offset, reference)
+
+    def _make_goal(self, cube_xy, goal_z, xy_offset, reference) -> np.ndarray:
+        """Goal position (base): reference x/y + offset, z = goal_z; ValueError when outside the trained range."""
+        lo, hi = self._goal_range()
+        base_xy = 0.5 * (lo[:2] + hi[:2]) if reference == "range_center" else np.asarray(cube_xy, dtype=np.float64)
+        goal = np.append(base_xy + np.asarray(xy_offset, dtype=np.float64), float(goal_z))
+        if not np.all((goal >= lo) & (goal <= hi)):
+            raise ValueError(f"goal {np.round(goal, 3).tolist()} ({reference} + {np.asarray(xy_offset).tolist()}) "
+                             f"outside the trained goal range {lo.tolist()} - {hi.tolist()}")
+        return goal
+
+    def _on_set_parameters(self, parameters) -> SetParametersResult:
+        changed = {p.name: p.value for p in parameters if p.name in GOAL_PARAMETERS}
+        if not changed:
+            return SetParametersResult(successful=True)
+        if self.state != "IDLE":
+            return SetParametersResult(successful=False,
+                                       reason=f"goal settings can only change while IDLE (session {self.state})")
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
+        try:
+            self._check_goal_settings(float(changed.get("goal_z_m", goal_z)),
+                                      changed.get("goal_xy_offset_m", goal_xy_offset),
+                                      str(changed.get("goal_xy_reference", goal_reference)))
+        except (TypeError, ValueError) as error:
+            return SetParametersResult(successful=False, reason=str(error))
+        self.get_logger().info(
+            "goal settings accepted: " + ", ".join(f"{k} {np.asarray(v).tolist()}" for k, v in changed.items()))
+        return SetParametersResult(successful=True)
 
     # ------------------------------------------------------------------ inputs
     def _vector_parameter(self, name: str) -> np.ndarray:
@@ -192,16 +285,26 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
             self.joint_update_ns[out] = now_ns
 
     def _object_pose_callback(self, msg: PoseStamped) -> None:
-        if msg.header.frame_id != self.base_frame:
-            self._log_status(f"Ignoring object pose frame '{msg.header.frame_id}', expected '{self.base_frame}'")
-            return
         p, o = msg.pose.position, msg.pose.orientation
         position = np.asarray([p.x, p.y, p.z], dtype=np.float64)
-        if np.all(np.isfinite(position)):
-            self.object_position = position
-            self.object_quat = np.asarray([o.x, o.y, o.z, o.w], dtype=np.float64)
-            self.object_update_ns = self._now_ns()
-            self.object_stamp_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
+        quat = np.asarray([o.x, o.y, o.z, o.w], dtype=np.float64)
+        if not np.all(np.isfinite(position)) or not np.all(np.isfinite(quat)) or np.linalg.norm(quat) < 1e-6:
+            return
+        quat = quat / np.linalg.norm(quat)
+        frame = msg.header.frame_id or self.base_frame
+        if frame != self.base_frame:
+            try:
+                t = self.tf_buffer.lookup_transform(self.base_frame, frame, RosTime()).transform
+            except TransformException as error:
+                self._log_status(f"Ignoring cube pose in '{frame}': {error}")
+                return
+            position, quat = transform_pose([t.translation.x, t.translation.y, t.translation.z],
+                                            [t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w], position, quat)
+        offset = np.asarray(self.get_parameter("object_position_offset_m").value, dtype=np.float64)
+        self.object_position = position + offset
+        self.object_quat = quat
+        self.object_update_ns = self._now_ns()
+        self.object_stamp_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
 
     def _finger_width(self) -> float:
         return float(self.joint_position[14] + self.joint_position[15])
@@ -211,8 +314,11 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         if not np.all(np.isfinite(self.joint_position)) or not np.all(np.isfinite(self.joint_velocity)):
             missing = [name for name, q in zip(JOINT_NAMES, self.joint_position) if not np.isfinite(q)]
             return False, f"waiting for joint states {missing or '(velocities)'}"
-        if np.any(now_ns - self.joint_update_ns > float(self.get_parameter("joint_state_timeout_s").value) * 1e9):
-            return False, "joint state is stale"
+        age_s = (now_ns - self.joint_update_ns) * 1e-9
+        if np.any(age_s[:14] > float(self.get_parameter("joint_state_timeout_s").value)):
+            return False, f"arm joint state is stale ({1e3 * float(np.max(age_s[:14])):.0f} ms)"
+        if np.any(age_s[14:] > float(self.get_parameter("gripper_joint_state_timeout_s").value)):
+            return False, f"gripper joint state is stale ({1e3 * float(np.max(age_s[14:])):.0f} ms)"
         if self.object_update_ns == 0:
             return False, "waiting for the cube pose"
         if now_ns - self.object_update_ns > float(self.get_parameter("object_pose_timeout_s").value) * 1e9:
@@ -226,10 +332,10 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         if not np.all((self.object_position >= lo) & (self.object_position <= hi)):
             return False, (f"cube {np.round(self.object_position, 3).tolist()} outside the training start region "
                            f"{lo.tolist()} - {hi.tolist()}")
-        target = self._vector_parameter("target_position")
-        lo, hi = self._vector_parameter("target_min"), self._vector_parameter("target_max")
-        if not np.all((target >= lo) & (target <= hi)):
-            return False, f"target_position {target.tolist()} outside the training range {lo.tolist()} - {hi.tolist()}"
+        try:
+            self._make_goal(self.object_position[:2], *self._goal_settings())
+        except ValueError as error:
+            return False, str(error)
         ready_error = float(np.max(np.abs(self.joint_position[RIGHT_ARM] - DEFAULT_RIGHT_JOINT_POSITION[:7])))
         if ready_error > float(self.get_parameter("ready_tolerance_rad").value):
             return False, f"right arm is not at the training ready pose (max error {ready_error:.3f} rad)"
@@ -259,7 +365,8 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
             ):
                 return False, "franka gripper grasp/move action servers are not ready"
 
-        self.target_position = self._vector_parameter("target_position")
+        self.target_position = self._make_goal(self.object_position[:2], *self._goal_settings())
+        self.goal_marker_publisher.publish(self._cube_marker("goal", self.target_position, (0.1, 0.9, 0.2, 0.5)))
         self.left_hold = self.joint_position[:7].copy()
         self.previous_action = np.zeros(8, dtype=np.float32)
         self.sequence = 0
@@ -270,7 +377,9 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.session_start_ns = time.monotonic_ns()
         self.last_tick_ns = 0
         self._open_log()
-        info = (f": cube {np.round(self.object_position, 3).tolist()}, target {self.target_position.tolist()} (base)")
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
+        info = (f": cube {np.round(self.object_position, 3).tolist()}, goal {np.round(self.target_position, 3).tolist()} "
+                f"(base; {goal_reference} + {goal_xy_offset.tolist()}, z {goal_z})")
         if self.shadow_mode:
             self.state = "RUNNING"
             return True, f"shadow session started{info} (inference and logging only, no commands)"
@@ -343,18 +452,74 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
         self.state = "IDLE"
         self.goal_handle = None
         if self.logger_ is not None:
+            try:
+                self._record_result(reason)
+            except Exception as error:  # never lose the trace/metadata over the summary
+                self.get_logger().error(f"Failed to record the session result: {error!r}")
             run_dir = self.logger_.finalize(reason)
             self.get_logger().info(f"Session ended ({reason}); {self.logger_.row_count} steps logged to {run_dir}")
             self.logger_ = None
+
+    def _record_result(self, reason: str) -> None:
+        """Final cube vs goal: into metadata.json and one row of <result_root>/<task>/results.csv.
+
+        The goal is position only (target quaternion fixed to identity); ``tilt_deg`` is the cube z axis vs base z.
+        """
+        metadata = self.logger_.metadata
+        goal = np.concatenate((self.target_position, [0.0, 0.0, 0.0, 1.0]))
+        final = box_goal_error(self.object_position, self.object_quat, goal, metadata["cube_start_quat_base"])
+        pose_age_ms = (self._now_ns() - self.object_update_ns) * 1e-6
+        final["cube_pose_age_ms"] = round(pose_age_ms, 1)
+        metadata["final_cube_vs_goal"] = final
+        e = final["error_xyz_m"]
+        self.get_logger().info(
+            f"Final cube vs goal: error x {e[0]:+.3f} y {e[1]:+.3f} z {e[2]:+.3f} m (|xyz| {final['error_m']:.3f}), "
+            f"tilt {final['tilt_deg']:.1f} deg, cube pose age {pose_age_ms:.0f} ms")
+        start = np.asarray(metadata["cube_start_position_base"], dtype=np.float64)
+        offset = self.get_parameter("goal_xy_offset_m").value
+        rpy = ("roll", "pitch", "yaw")
+        row = {
+            "session": self.logger_.run_dir.name,
+            "model": Path(str(self.actor.model_path)).name,
+            "mode": metadata["mode"],
+            "end_reason": reason,
+            "steps": self.logger_.row_count,
+            "duration_s": round((time.monotonic_ns() - self.session_start_ns) * 1e-9, 2),
+            "goal_xy_reference": str(self.get_parameter("goal_xy_reference").value),
+            "goal_xy_offset_x": float(offset[0]),
+            "goal_xy_offset_y": float(offset[1]),
+            **{f"start_{a}": round(float(v), 4) for a, v in zip("xyz", start)},
+            **{f"goal_{a}": v for a, v in zip("xyz", final["goal_position_base"])},
+            **{f"final_{a}": v for a, v in zip("xyz", final["box_position_base"])},
+            **{f"error_{a}": v for a, v in zip("xyz", e)},
+            "error_xy_norm": final["error_xy_m"],
+            "error_xyz_norm": final["error_m"],
+            **{f"final_{a}_deg": v for a, v in zip(rpy, final["box_rpy_deg"])},
+            **{f"change_{a}_deg": v for a, v in zip(rpy, final["rpy_change_deg"])},
+            "tilt_deg": final["tilt_deg"],
+            "gripper_closed": int(self.gripper_closed),
+            "finger_width_m": round(self._finger_width(), 4),
+            "cube_pose_age_ms": final["cube_pose_age_ms"],
+            "log_dir": str(self.logger_.run_dir),
+        }
+        configured = str(self.get_parameter("result_root").value).strip()
+        root = Path(configured).expanduser() if configured else Path(__file__).resolve().parents[2] / "experi_result"
+        try:
+            path = append_session_result(root / str(self.get_parameter("log_task_name").value) / "results.csv", row)
+            self.get_logger().info(f"Session result appended to {path}")
+        except OSError as error:
+            self.get_logger().error(f"Failed to write the session result: {error}")
 
     def _open_log(self) -> None:
         configured = str(self.get_parameter("log_root").value).strip()
         log_root = Path(configured).expanduser() if configured else Path(__file__).resolve().parents[2] / "data"
         names = (
-            "joint_states_topic", "gripper_joint_states_topic", "object_pose_topic", "base_frame", "gripper_action_ns", "policy_rate_hz",
-            "joint_state_timeout_s", "object_pose_timeout_s", "command_timeout_s", "max_duration_s",
+            "joint_states_topic", "gripper_joint_states_topic", "object_pose_topic", "object_position_offset_m", "base_frame",
+            "gripper_action_ns", "policy_rate_hz",
+            "joint_state_timeout_s", "gripper_joint_state_timeout_s", "object_pose_timeout_s", "command_timeout_s", "max_duration_s",
             "max_policy_target_delta_rad", "ready_tolerance_rad", "control_gripper", "gripper_hysteresis",
             "grasp_width_m", "grasp_speed_mps", "grasp_force_n", "grasp_epsilon_m", "open_width_m", "open_speed_mps",
+            "goal_z_m", "goal_xy_offset_m", "goal_xy_reference",
             "target_min", "target_max", "object_start_min", "object_start_max", "shadow_mode",
         )
         try:
@@ -435,8 +600,62 @@ class PPOLiftCubeSim2RealPolicyNode(Node):
             return
         self._send_gripper(closed)
 
+    # ------------------------------------------------------------------ RViz
+    def _cube_marker(self, ns: str, position, rgba, quat=(0.0, 0.0, 0.0, 1.0)) -> Marker:
+        marker = Marker()
+        marker.header.frame_id = self.base_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns, marker.id, marker.type, marker.action = ns, 0, Marker.CUBE, Marker.ADD
+        p, o = marker.pose.position, marker.pose.orientation
+        p.x, p.y, p.z = (float(v) for v in position)
+        o.x, o.y, o.z, o.w = (float(v) for v in quat)
+        marker.scale.x, marker.scale.y, marker.scale.z = (float(v) for v in self.get_parameter("object_size_m").value)
+        marker.color.r, marker.color.g, marker.color.b, marker.color.a = rgba
+        return marker
+
+    def _range_markers(self) -> MarkerArray:
+        """Trained cube start x/y (blue rectangle on the table) and goal range (green wireframe box)."""
+        def lines(ns, rgba, corners_pairs):
+            marker = Marker()
+            marker.header.frame_id = self.base_frame
+            marker.ns, marker.id, marker.type, marker.action = ns, 0, Marker.LINE_LIST, Marker.ADD
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.003
+            marker.color.r, marker.color.g, marker.color.b, marker.color.a = rgba
+            marker.points = [Point(x=float(a[0]), y=float(a[1]), z=float(a[2])) for pair in corners_pairs for a in pair]
+            return marker
+
+        (x0, x1), (y0, y1) = TRAINED_CUBE_START_XY
+        z = TABLE_TOP_Z + 0.002
+        square = [(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)]
+        start = lines("cube_start_range", (0.2, 0.6, 1.0, 1.0), [(square[i], square[(i + 1) % 4]) for i in range(4)])
+        lo, hi = self._goal_range()
+        corners = [np.where([bx, by, bz], hi, lo) for bx in (0, 1) for by in (0, 1) for bz in (0, 1)]
+        edges = [(corners[i], corners[j]) for i in range(8) for j in range(i + 1, 8)
+                 if bin(i ^ j).count("1") == 1]
+        goal = lines("goal_range", (0.1, 0.9, 0.2, 0.6), edges)
+        return MarkerArray(markers=[start, goal])
+
+    def _publish_markers(self) -> None:
+        if self.object_update_ns == 0:
+            return
+        self.cube_marker_publisher.publish(
+            self._cube_marker("policy_cube", self.object_position, (1.0, 0.55, 0.0, 0.6), self.object_quat))
+        if self.state != "IDLE":
+            return
+        # Preview: the goal start_policy would latch now (red: outside the trained goal range, start refuses it)
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
+        try:
+            goal, rgba = self._make_goal(self.object_position[:2], goal_z, goal_xy_offset, goal_reference), (0.1, 0.9, 0.2, 0.35)
+        except ValueError:
+            reference_xy = (0.5 * (self._goal_range()[0][:2] + self._goal_range()[1][:2])
+                            if goal_reference == "range_center" else self.object_position[:2])
+            goal, rgba = np.append(reference_xy + goal_xy_offset, goal_z), (0.9, 0.1, 0.1, 0.35)
+        self.goal_marker_publisher.publish(self._cube_marker("goal", goal, rgba))
+
     # ------------------------------------------------------------------ policy tick
     def _tick(self) -> None:
+        self._publish_markers()
         if self.state != "RUNNING":
             if self.state == "IDLE":
                 if (self.get_parameter("auto_start").value and not self.shadow_mode and not self.auto_start_requested
@@ -532,9 +751,12 @@ def main(args: Optional[list[str]] = None):
         pass
     finally:
         if node.goal_handle is not None:
-            node.goal_handle.cancel_goal_async()
+            try:
+                node.goal_handle.cancel_goal_async()
+            except Exception:  # context already shut down by Ctrl-C; the controller stops on command timeout
+                pass
         if node.logger_ is not None:
-            node.logger_.finalize("node shutdown")
+            node._end_session(node.end_reason or "node shutdown")
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

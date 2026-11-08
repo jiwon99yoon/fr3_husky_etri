@@ -35,6 +35,7 @@ from .boxlift_core import (
     canonicalize_box_quat,
     check_start_conditions,
     load_boxlift_policy,
+    goal_xy_from_settings,
     make_goal,
     normalize_quat,
     yaw_from_quat,
@@ -44,7 +45,7 @@ PARAMETERS = (
     "model_path", "box_size_m", "box_size_tolerance_m", "box_pose_topic", "box_position_offset_m",
     "joint_states_topic", "base_frame", "ready_tolerance_rad", "start_position_margin_m",
     "start_yaw_margin_rad", "rest_z_tolerance_m", "pregrasp_joint_margin_rad", "shadow_mode",
-    "goal_z_m", "goal_xy_offset_m",
+    "goal_z_m", "goal_xy_offset_m", "goal_xy_reference",
 )
 
 
@@ -115,11 +116,15 @@ def main(argv=None) -> int:
               f"{spread[0]:.1f}/{spread[1]:.1f} cm")
         print(f"        policy input x {position[0]:.3f}  y {position[1]:+.3f}  z {position[2]:+.3f}  "
               f"yaw {math.degrees(yaw):+.1f} deg  (offset {offset.tolist()})")
-        goal_xy = position[:2] + np.asarray(p["goal_xy_offset_m"], dtype=np.float64)
-        print(f"goal    x {goal_xy[0]:.3f}  y {goal_xy[1]:+.3f}  z {p['goal_z_m']:+.3f}  "
-              f"(start + offset {p['goal_xy_offset_m']}; RViz 'Box-lift goal' after start_policy)")
+        reference = p["goal_xy_reference"]
         try:
-            make_goal(position[:2], p["goal_z_m"], manifest, p["goal_xy_offset_m"])
+            goal_xy = goal_xy_from_settings(position[:2], p["goal_xy_offset_m"], manifest, reference)
+        except ValueError:
+            goal_xy = position[:2] + np.asarray(p["goal_xy_offset_m"], dtype=np.float64)
+        print(f"goal    x {goal_xy[0]:.3f}  y {goal_xy[1]:+.3f}  z {p['goal_z_m']:+.3f}  "
+              f"({reference} + offset {p['goal_xy_offset_m']}; RViz 'Box-lift goal')")
+        try:
+            make_goal(position[:2], p["goal_z_m"], manifest, p["goal_xy_offset_m"], reference)
         except ValueError as error:
             print(f"        REFUSED by start_policy: {error}")
         if rate < 20.0:

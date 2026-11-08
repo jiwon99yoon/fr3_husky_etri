@@ -21,4 +21,10 @@ cabinet_book_insert_fk_node:
     # layout (hinge at robot left) the door opens clockwise, so -1.0 makes opening positive as in training.
     # Check: a small physical opening must give a positive /door_angle.
     door_angle_sign: -1.0
-    publish_rate_hz: 50.0
+    publish_rate_hz: 100.0
+    # link7 from FK of the arm joints (1 kHz), not the ~15 Hz robot_state_publisher TF; mounts from TF once.
+    joint_states_topic: /dual_fr3/joint_states
+    left_link0_frame: left_fr3_link0
+    right_link0_frame: right_fr3_link0
+    joint_state_timeout_s: 0.1
+    fk_tf_check_tolerance_m: 0.002     # FK vs TF link7, checked once with the arms still

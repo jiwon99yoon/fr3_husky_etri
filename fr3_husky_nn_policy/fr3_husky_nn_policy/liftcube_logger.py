@@ -14,6 +14,7 @@ delay of the Franka gripper: compare ``gripper_closed_cmd`` with ``finger_width_
 
 from __future__ import annotations
 
+import array
 import csv
 import json
 import re
@@ -148,4 +149,6 @@ def _json_default(value):
         return value.item()
     if isinstance(value, Path):
         return str(value)
+    if isinstance(value, array.array):  # rclpy double/int arrays after `ros2 param set`
+        return value.tolist()
     raise TypeError(f"not JSON serializable: {type(value).__name__}")

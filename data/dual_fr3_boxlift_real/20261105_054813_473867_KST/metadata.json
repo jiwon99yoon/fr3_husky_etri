@@ -1,0 +1,343 @@
+{
+  "started_at": "2026-11-05T05:48:13.473867+09:00",
+  "model_path": "/home/husky-rcu/jw_ws/src/fr3_husky/fr3_husky_nn_policy/models/facegrip_boxdrop_flatsqueeze_lowmusoftlift_model_4997.npz",
+  "model_source_sha256": "7f035b575ffdacc0f7fe7f3dc2f78862bd721e8801cebc1605e45703f29bac9c",
+  "mode": "command",
+  "goal_base": [
+    0.43396002048269866,
+    0.0029088740763425908,
+    0.15,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "box_start_position_base": [
+    0.43396002048269866,
+    0.0029088740763425908,
+    -0.23943569169169884
+  ],
+  "box_start_quat_base_raw": [
+    -0.0032216493362202114,
+    -0.014318916834083179,
+    0.009944334566621332,
+    -0.9998428375531229
+  ],
+  "box_start_yaw": -0.01980273189478139,
+  "start_mode": "pregrasp_table",
+  "start_table_row": 954,
+  "joint_start_position": [
+    0.011333082802593708,
+    1.6278842687606812,
+    -0.16478145122528076,
+    -1.365067481994629,
+    -0.9686949849128723,
+    1.6196931600570679,
+    0.576302707195282,
+    -0.008068646304309368,
+    1.5991870164871216,
+    0.16425904631614685,
+    -1.454498529434204,
+    1.0407410860061646,
+    1.6657732725143433,
+    0.9367362856864929
+  ],
+  "joint_names": [
+    "left_fr3_joint1",
+    "left_fr3_joint2",
+    "left_fr3_joint3",
+    "left_fr3_joint4",
+    "left_fr3_joint5",
+    "left_fr3_joint6",
+    "left_fr3_joint7",
+    "right_fr3_joint1",
+    "right_fr3_joint2",
+    "right_fr3_joint3",
+    "right_fr3_joint4",
+    "right_fr3_joint5",
+    "right_fr3_joint6",
+    "right_fr3_joint7"
+  ],
+  "parameters": {
+    "box_size_m": [
+      0.31,
+      0.41,
+      0.28
+    ],
+    "box_size_tolerance_m": 0.005,
+    "joint_states_topic": "/dual_fr3/joint_states",
+    "box_pose_topic": "/box_tf",
+    "box_position_offset_m": [
+      0.0,
+      0.0,
+      -0.03
+    ],
+    "base_frame": "base",
+    "goal_z_m": 0.15,
+    "goal_xy_offset_m": [
+      0.0,
+      0.0
+    ],
+    "joint_state_timeout_s": 0.15,
+    "box_pose_timeout_s": 0.3,
+    "command_timeout_s": 0.15,
+    "max_duration_s": 0.0,
+    "max_policy_target_delta_rad": 0.2,
+    "ready_tolerance_rad": 0.2,
+    "start_position_margin_m": 0.01,
+    "start_yaw_margin_rad": 0.0,
+    "rest_z_tolerance_m": 0.05,
+    "pregrasp_joint_margin_rad": 0.02,
+    "shadow_mode": false
+  },
+  "manifest": {
+    "schema": "dual_fr3_boxlift_manifest/1",
+    "provenance": {
+      "checkpoint": "/home/dyros/dual_fr3_lab/logs/rsl_rl/dual_fr3_plate_lift_sim2real_100hz_light_pregrasp_wide_rollalign_facegrip_boxdrop_flatsqueeze_lowmusoftlift/2026-11-05_04-14-11_lowmusoftlift_from_fs3998/model_4997.pt",
+      "checkpoint_sha256": "7f035b575ffdacc0f7fe7f3dc2f78862bd721e8801cebc1605e45703f29bac9c",
+      "iteration": 4997,
+      "experiment_name": "dual_fr3_plate_lift_sim2real_100hz_light_pregrasp_wide_rollalign_facegrip_boxdrop_flatsqueeze_lowmusoftlift",
+      "run_name": "lowmusoftlift_from_fs3998",
+      "env_yaml": "/home/dyros/dual_fr3_lab/logs/rsl_rl/dual_fr3_plate_lift_sim2real_100hz_light_pregrasp_wide_rollalign_facegrip_boxdrop_flatsqueeze_lowmusoftlift/2026-11-05_04-14-11_lowmusoftlift_from_fs3998/params/env.yaml",
+      "env_yaml_sha256": "3712689ebf9f68019d749707d8a3bab356cb326075ece484e0f79a48e015d132",
+      "git_commit": "2b4529162c81f1c95fccd8ecf1cd4296888ff78d",
+      "exported_utc": "2026-11-04T20:19:03.556066+00:00",
+      "exporter": "dual_fr3_lab/scripts/tools/export_boxlift_actor.py"
+    },
+    "policy": {
+      "physics_dt": 0.01,
+      "decimation": 5,
+      "policy_dt": 0.05,
+      "episode_length_s": 4.0,
+      "output_activation": "tanh"
+    },
+    "observation": {
+      "terms": [
+        [
+          "joint_pos",
+          "joint_pos_rel"
+        ],
+        [
+          "joint_vel",
+          "joint_vel_rel"
+        ],
+        [
+          "object_position",
+          "object_position_in_robot_root_frame"
+        ],
+        [
+          "target_object_position",
+          "generated_commands"
+        ],
+        [
+          "actions",
+          "last_action"
+        ],
+        [
+          "object_orientation",
+          "object_orientation_in_robot_root_frame"
+        ]
+      ],
+      "box_pose": "live"
+    },
+    "joints": {
+      "names": [
+        "left_fr3_joint1",
+        "left_fr3_joint2",
+        "left_fr3_joint3",
+        "left_fr3_joint4",
+        "left_fr3_joint5",
+        "left_fr3_joint6",
+        "left_fr3_joint7",
+        "right_fr3_joint1",
+        "right_fr3_joint2",
+        "right_fr3_joint3",
+        "right_fr3_joint4",
+        "right_fr3_joint5",
+        "right_fr3_joint6",
+        "right_fr3_joint7"
+      ],
+      "default_position": [
+        -0.5236,
+        -0.7854,
+        0.0,
+        -2.3562,
+        0.0,
+        1.5708,
+        0.7854,
+        0.5236,
+        -0.7854,
+        0.0,
+        -2.3562,
+        0.0,
+        1.5708,
+        0.7854
+      ]
+    },
+    "action": {
+      "scale": 0.1,
+      "clip": [
+        -0.1,
+        0.1
+      ],
+      "reference_mode": "policy_step",
+      "target_limits": [
+        [
+          -2.6937,
+          2.6937
+        ],
+        [
+          -1.7337,
+          1.7337
+        ],
+        [
+          -2.8507000000000002,
+          2.8507000000000002
+        ],
+        [
+          -2.9921,
+          -0.20179999999999998
+        ],
+        [
+          -2.7565000000000004,
+          2.7565000000000004
+        ],
+        [
+          0.5945,
+          4.4669
+        ],
+        [
+          -2.9659,
+          2.9659
+        ],
+        [
+          -2.6937,
+          2.6937
+        ],
+        [
+          -1.7337,
+          1.7337
+        ],
+        [
+          -2.8507000000000002,
+          2.8507000000000002
+        ],
+        [
+          -2.9921,
+          -0.20179999999999998
+        ],
+        [
+          -2.7565000000000004,
+          2.7565000000000004
+        ],
+        [
+          0.5945,
+          4.4669
+        ],
+        [
+          -2.9659,
+          2.9659
+        ]
+      ],
+      "trained_joint_state_delay_s": [
+        0.0,
+        0.0
+      ],
+      "trained_command_delay_s": [
+        0.0,
+        0.0
+      ]
+    },
+    "box": {
+      "size": [
+        0.31,
+        0.41,
+        0.28
+      ],
+      "size_scale_range": {
+        "x": [
+          0.967741935483871,
+          1.032258064516129
+        ],
+        "y": [
+          0.975609756097561,
+          1.024390243902439
+        ],
+        "z": [
+          0.9642857142857143,
+          1.0357142857142858
+        ]
+      },
+      "nominal_mass": 0.5,
+      "mass_range": [
+        0.4,
+        0.6
+      ],
+      "static_friction_range": [
+        0.1,
+        0.8
+      ],
+      "start_x_range_base": [
+        0.387064208984375,
+        0.5101678466796875
+      ],
+      "start_y_range_base": [
+        -0.11651206970214843,
+        0.1178338623046875
+      ],
+      "start_yaw_range": [
+        -0.1660642350224973,
+        0.16582977335714622
+      ],
+      "rest_center_z_base": -0.265
+    },
+    "goal": {
+      "command_class": "dual_fr3_lab.tasks.manager_based.lift_plate.joint_pos_env_cfg:VerticalLiftPoseCommand",
+      "z_range_base": [
+        0.15,
+        0.35
+      ],
+      "quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    "robot": {
+      "root_height_m": 0.405
+    },
+    "start": {
+      "mode": "pregrasp_table",
+      "table_file": "/home/dyros/dual_fr3_lab/source/dual_fr3_lab/dual_fr3_lab/assets/pregrasp/plate_box410wide_pregrasp_gap004_margin005_snapj7.npz",
+      "table_file_trained": "/home/dyros/dual_fr3_lab/source/dual_fr3_lab/dual_fr3_lab/assets/pregrasp/plate_box410wide_pregrasp_gap004_margin005_snapj7.npz",
+      "table_sha256": "cb9e1fa9419956f652d0f29c70aa7d6b3c794591395457cb650ac79cd5c52126",
+      "table_meta": "{'task': 'Isaac-Lift-Box-DualFR3-Plate-Sim2Real-100Hz-Light-Margin-Play-v0', 'gap': 0.04, 'grip_dz': 0.05, 'box_dx': [-0.1, 0.0], 'null': 0.1, 'lim_k': 1.0, 'seed': 0, 'roll_align': False, 'snap_j7': True, 'box_size': [0.31, 0.41, 0.28]}",
+      "rows": 3956,
+      "box_pos_noise_m": 0.01,
+      "box_yaw_noise_rad": 0.05,
+      "joint_noise_rad": 0.01,
+      "arrays": {
+        "joint_position": "pregrasp_joint_position",
+        "box_pose_base": "pregrasp_box_pose_base"
+      },
+      "box_ranges_base": {
+        "x": [
+          0.387064208984375,
+          0.5101678466796875
+        ],
+        "y": [
+          -0.11651206970214843,
+          0.1178338623046875
+        ],
+        "yaw": [
+          -0.1660642350224973,
+          0.16582977335714622
+        ]
+      }
+    }
+  },
+  "ended_at": "2026-11-05T05:48:19.245267+09:00",
+  "end_reason": "node shutdown",
+  "trace_rows": 115
+}

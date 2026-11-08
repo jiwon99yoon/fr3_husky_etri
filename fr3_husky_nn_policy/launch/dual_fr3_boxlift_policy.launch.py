@@ -19,6 +19,7 @@ Examples::
         box_size_m:="[0.310, 0.410, 0.280]" use_mujoco:=true mujoco_start_row:=1965
 """
 
+import json
 import math
 
 import numpy as np
@@ -57,6 +58,13 @@ def _mujoco_start(context):
     goal_offset = yaml.safe_load(LaunchConfiguration("goal_xy_offset_m").perform(context))
     if len(goal_offset) != 2:
         raise RuntimeError(f"goal_xy_offset_m must be [dx, dy], got {goal_offset!r}")
+    if LaunchConfiguration("goal_xy_reference").perform(context) == "range_center":
+        with np.load(model_path, allow_pickle=False) as archive:
+            xy_range = json.loads(str(archive["manifest_json"].item())).get("goal", {}).get("xy_range_base")
+        if xy_range is None:
+            raise RuntimeError("goal_xy_reference:=range_center needs a checkpoint with goal.xy_range_base")
+        center = [0.5 * (xy_range[a][0] + xy_range[a][1]) for a in "xy"]
+        goal_offset = [center[0] + goal_offset[0] - x, center[1] + goal_offset[1] - y]
     scene_args = (
         f"reach_markers:=false gravity_z:=-9.81 mobile_mount_z:={LaunchConfiguration('mujoco_mount_z').perform(context)}"
         f" with_box:=true box_x:={x:.6f} box_y:={y:.6f} box_yaw:={yaw:.6f}"
@@ -123,6 +131,7 @@ def _launch_setup(context, *args, **kwargs):
                 "shadow_mode": ParameterValue(LaunchConfiguration("shadow_mode"), value_type=bool),
                 "goal_z_m": ParameterValue(LaunchConfiguration("goal_z_m"), value_type=float),
                 "goal_xy_offset_m": ParameterValue(LaunchConfiguration("goal_xy_offset_m"), value_type=list[float]),
+                "goal_xy_reference": LaunchConfiguration("goal_xy_reference"),
                 "box_size_m": ParameterValue(LaunchConfiguration("box_size_m"), value_type=list[float]),
                 "box_pose_topic": LaunchConfiguration("box_pose_topic"),
                 "box_position_offset_m": ParameterValue(LaunchConfiguration("box_position_offset_m"),
@@ -166,6 +175,9 @@ def generate_launch_description():
                                   description="goal x/y = box start x/y + this (base); checked against the "
                                               "manifest goal.xy_offset_range_base (old checkpoints: 0 only) "
                                               "or goal.xy_range_base (absolute goal x/y)"),
+            DeclareLaunchArgument("goal_xy_reference", default_value="box_start",
+                                  description="what goal_xy_offset_m is added to: box_start (box x/y at start_policy) "
+                                              "or range_center (center of the trained goal.xy_range_base)"),
             DeclareLaunchArgument("box_size_m", default_value="[0.410, 0.310, 0.280]",
                                   description="physical box (x, y squeezed, z) in base; must match the policy's box"),
             DeclareLaunchArgument("box_pose_topic", default_value="/box_pose"),

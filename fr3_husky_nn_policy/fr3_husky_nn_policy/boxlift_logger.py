@@ -6,12 +6,16 @@ One directory per start_policy session::
         metadata.json   manifest, node parameters, goal, start/end time, end reason, step count
         trace.csv       one row per policy tick (timing, full 56-D observation, action, joint target)
 
+Besides, every session appends one summary row (final box vs goal: x/y/z error, norms, roll/pitch/yaw) to
+``<result_root>/<task_name>/results.csv`` (``append_session_result``).
+
 The observation columns are exactly the actor input, so a run can be replayed offline through the
 same NPZ and compared with Isaac (``obs_*`` -> actor -> ``action_*``).
 """
 
 from __future__ import annotations
 
+import array
 import csv
 import json
 import re
@@ -43,6 +47,19 @@ FIELDNAMES = (
     *(f"q_target_{i}" for i in range(ACTION_DIM)),
     *(f"box_quat_raw_{axis}" for axis in "xyzw"),  # base-frame quaternion before canonicalization
 )
+
+
+def append_session_result(path: Path, row: Mapping[str, Any]) -> Path:
+    """Append one session summary row to a CSV kept across runs (header written when the file is new)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(row))
+        if new:
+            writer.writeheader()
+        writer.writerow(row)
+    return path
 
 
 class BoxLiftRunLogger:
@@ -119,4 +136,6 @@ def _json_default(value):
         return value.item()
     if isinstance(value, Path):
         return str(value)
+    if isinstance(value, array.array):  # rclpy returns array parameters set at runtime (ros2 param set) as array.array
+        return value.tolist()
     raise TypeError(f"not JSON serializable: {type(value).__name__}")

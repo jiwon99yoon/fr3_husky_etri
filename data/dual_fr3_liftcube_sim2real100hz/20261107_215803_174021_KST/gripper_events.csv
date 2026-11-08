@@ -1,0 +1,3 @@
+elapsed_s,ros_time_ns,event,command,success,detail,finger_width_m
+0.508783,1794056283682685464,send,grasp,,,0.079941
+0.525664,1794056283699566572,accepted,grasp,,,0.079941

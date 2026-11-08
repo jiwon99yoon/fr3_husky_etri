@@ -203,6 +203,19 @@ ros2 service call /ppo_boxlift_policy_node/start_policy std_srvs/srv/Trigger {}
 - `boxlift_start_helper`도 지금 박스 위치로 목표를 계산한다. 거부될 목표면 `REFUSED by start_policy: ...` 줄을 찍는다.
 - MuJoCo(`use_mujoco:=true`) 뷰어의 초록 목표 박스는 launch 인자로 준 처음 값만 반영한다. `ros2 param set`은 노드 목표와 RViz만 바꾼다.
 
+#### 목표를 범위 중앙 기준으로 주기: `goal_xy_reference` (2026-11-07)
+
+기본(`box_start`)은 목표 = 시작 박스 x/y + offset이라, 박스를 놓을 때마다 목표가 같이 움직인다. `goal_xy_reference:=range_center`로 띄우면 목표 = **학습한 목표 범위의 중앙 + offset**이다. 박스를 어디에 놓든 같은 offset이면 같은 목표다.
+
+| 모델 | 목표 범위 (base) | 중앙 | `range_center`일 때 offset 범위 |
+|---|---|---|---|
+| GoalXY 4700/5499 | x 0.40~0.50, y −0.10~0.10 | (0.45, 0.00) | x −0.05~+0.05, y −0.10~+0.10 |
+
+- 시작 박스 표의 범위(x 0.397~0.500, y −0.107~0.108)도 중앙이 (0.449, 0.001)이라 목표 범위 중앙과 거의 같다.
+- `goal.xy_range_base`가 없는 모델(목표가 시작 박스 기준으로만 학습됨)에서는 `range_center`를 거부한다.
+- launch 인자 `goal_xy_reference:=range_center`로 주거나, IDLE에서 `ros2 param set /ppo_boxlift_policy_node goal_xy_reference range_center`로 바꾼다. offset 범위를 넘으면 `ros2 param set`이 바로 거부된다.
+- `boxlift_start_helper`, RViz 목표 박스, `metadata.json`(`parameters.goal_xy_reference`)에 모두 반영된다.
+
 모델의 학습 범위 확인:
 
 ```bash

@@ -1,0 +1,325 @@
+{
+  "started_at": "2026-11-04T15:31:34.792366+09:00",
+  "model_path": "/home/husky-rcu/jw_ws/src/fr3_husky/model/dual_fr3_boxlift_pregrasp_box410_model2999.npz",
+  "model_source_sha256": "b43452647e3f52fb278a83332cb7fda16950ff3a15b51458dcddf4c90f75dcad",
+  "mode": "command",
+  "goal_base": [
+    0.45983299999999994,
+    -0.00046499999999981045,
+    0.15,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "box_start_position_base": [
+    0.45983299999999994,
+    -0.00046499999999981045,
+    -0.265052402170095
+  ],
+  "box_start_quat_base_raw": [
+    4.4662322151942066e-17,
+    -5.769226555863358e-20,
+    0.00034949999288474797,
+    0.9999999389248756
+  ],
+  "box_start_yaw": 0.0006989999999999999,
+  "start_mode": "pregrasp_table",
+  "start_table_row": 1919,
+  "joint_start_position": [
+    0.35958510663964993,
+    -0.03587055677378729,
+    -1.0477324995323558,
+    -2.1380226334986734,
+    -1.265364173586137,
+    1.237093629760442,
+    1.0169888707631412,
+    -0.02931301427757667,
+    -0.153962751999931,
+    0.5346075846734895,
+    -2.0268324027093025,
+    1.4308920993047154,
+    1.325259102915297,
+    0.9310605031557736
+  ],
+  "joint_names": [
+    "left_fr3_joint1",
+    "left_fr3_joint2",
+    "left_fr3_joint3",
+    "left_fr3_joint4",
+    "left_fr3_joint5",
+    "left_fr3_joint6",
+    "left_fr3_joint7",
+    "right_fr3_joint1",
+    "right_fr3_joint2",
+    "right_fr3_joint3",
+    "right_fr3_joint4",
+    "right_fr3_joint5",
+    "right_fr3_joint6",
+    "right_fr3_joint7"
+  ],
+  "parameters": {
+    "box_size_m": [
+      0.41,
+      0.31,
+      0.28
+    ],
+    "box_size_tolerance_m": 0.005,
+    "joint_states_topic": "/dual_fr3/joint_states",
+    "box_pose_topic": "/box_pose",
+    "base_frame": "base",
+    "goal_z_m": 0.15,
+    "joint_state_timeout_s": 0.15,
+    "box_pose_timeout_s": 0.3,
+    "command_timeout_s": 0.15,
+    "max_duration_s": 0.0,
+    "max_policy_target_delta_rad": 0.2,
+    "ready_tolerance_rad": 0.2,
+    "start_position_margin_m": 0.0,
+    "start_yaw_margin_rad": 0.0,
+    "rest_z_tolerance_m": 0.03,
+    "pregrasp_joint_margin_rad": 0.02,
+    "shadow_mode": false
+  },
+  "manifest": {
+    "schema": "dual_fr3_boxlift_manifest/1",
+    "provenance": {
+      "checkpoint": "/home/dyros/dual_fr3_lab/logs/rsl_rl/dual_fr3_plate_lift_sim2real_100hz_light_pregrasp/2026-11-03_01-25-42_pregrasp_box410/model_2999.pt",
+      "checkpoint_sha256": "b43452647e3f52fb278a83332cb7fda16950ff3a15b51458dcddf4c90f75dcad",
+      "iteration": 2999,
+      "experiment_name": "dual_fr3_plate_lift_sim2real_100hz_light_pregrasp",
+      "run_name": "pregrasp_box410",
+      "env_yaml": "/home/dyros/dual_fr3_lab/logs/rsl_rl/dual_fr3_plate_lift_sim2real_100hz_light_pregrasp/2026-11-03_01-25-42_pregrasp_box410/params/env.yaml",
+      "env_yaml_sha256": "ac4bc3fab67742db9fb61995fca40187b3739b4a8c6040b3c39c5d67ec0bb405",
+      "git_commit": "338c4f93ed740b104f6930208bf45bfee25a2dc2",
+      "exported_utc": "2026-11-03T02:55:00.702002+00:00",
+      "exporter": "dual_fr3_lab/scripts/tools/export_boxlift_actor.py"
+    },
+    "policy": {
+      "physics_dt": 0.01,
+      "decimation": 5,
+      "policy_dt": 0.05,
+      "episode_length_s": 4.0,
+      "output_activation": "tanh"
+    },
+    "observation": {
+      "terms": [
+        [
+          "joint_pos",
+          "joint_pos_rel"
+        ],
+        [
+          "joint_vel",
+          "joint_vel_rel"
+        ],
+        [
+          "object_position",
+          "object_position_in_robot_root_frame"
+        ],
+        [
+          "target_object_position",
+          "generated_commands"
+        ],
+        [
+          "actions",
+          "last_action"
+        ],
+        [
+          "object_orientation",
+          "object_orientation_in_robot_root_frame"
+        ]
+      ]
+    },
+    "joints": {
+      "names": [
+        "left_fr3_joint1",
+        "left_fr3_joint2",
+        "left_fr3_joint3",
+        "left_fr3_joint4",
+        "left_fr3_joint5",
+        "left_fr3_joint6",
+        "left_fr3_joint7",
+        "right_fr3_joint1",
+        "right_fr3_joint2",
+        "right_fr3_joint3",
+        "right_fr3_joint4",
+        "right_fr3_joint5",
+        "right_fr3_joint6",
+        "right_fr3_joint7"
+      ],
+      "default_position": [
+        -0.5236,
+        -0.7854,
+        0.0,
+        -2.3562,
+        0.0,
+        1.5708,
+        0.7854,
+        0.5236,
+        -0.7854,
+        0.0,
+        -2.3562,
+        0.0,
+        1.5708,
+        0.7854
+      ]
+    },
+    "action": {
+      "scale": 0.1,
+      "clip": [
+        -0.1,
+        0.1
+      ],
+      "reference_mode": "policy_step",
+      "target_limits": [
+        [
+          -2.6937,
+          2.6937
+        ],
+        [
+          -1.7337,
+          1.7337
+        ],
+        [
+          -2.8507000000000002,
+          2.8507000000000002
+        ],
+        [
+          -2.9921,
+          -0.20179999999999998
+        ],
+        [
+          -2.7565000000000004,
+          2.7565000000000004
+        ],
+        [
+          0.5945,
+          4.4669
+        ],
+        [
+          -2.9659,
+          2.9659
+        ],
+        [
+          -2.6937,
+          2.6937
+        ],
+        [
+          -1.7337,
+          1.7337
+        ],
+        [
+          -2.8507000000000002,
+          2.8507000000000002
+        ],
+        [
+          -2.9921,
+          -0.20179999999999998
+        ],
+        [
+          -2.7565000000000004,
+          2.7565000000000004
+        ],
+        [
+          0.5945,
+          4.4669
+        ],
+        [
+          -2.9659,
+          2.9659
+        ]
+      ]
+    },
+    "box": {
+      "size": [
+        0.41,
+        0.31,
+        0.28
+      ],
+      "size_scale_range": {
+        "x": [
+          1.0,
+          1.0
+        ],
+        "y": [
+          1.0,
+          1.0
+        ],
+        "z": [
+          1.0,
+          1.0
+        ]
+      },
+      "nominal_mass": 0.5,
+      "mass_range": [
+        0.4,
+        0.6
+      ],
+      "static_friction_range": [
+        0.4,
+        1.2
+      ],
+      "start_x_range_base": [
+        0.4370863342285156,
+        0.530294189453125
+      ],
+      "start_y_range_base": [
+        -0.11654926300048828,
+        0.11671234130859375
+      ],
+      "start_yaw_range": [
+        -0.16416232910955397,
+        0.16137809031314643
+      ],
+      "rest_center_z_base": -0.265
+    },
+    "goal": {
+      "command_class": "dual_fr3_lab.tasks.manager_based.lift_plate.joint_pos_env_cfg:VerticalLiftPoseCommand",
+      "z_range_base": [
+        0.15,
+        0.35
+      ],
+      "quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    "robot": {
+      "root_height_m": 0.405
+    },
+    "start": {
+      "mode": "pregrasp_table",
+      "table_file": "/home/dyros/dual_fr3_lab/source/dual_fr3_lab/dual_fr3_lab/assets/pregrasp/plate_box410_pregrasp_gap004_margin005.npz",
+      "table_file_trained": "/home/dyros/dual_fr3_lab/source/dual_fr3_lab/dual_fr3_lab/assets/pregrasp/plate_box410_pregrasp_gap004_margin005.npz",
+      "table_sha256": "4636683740676b3c2c9352b64dc435e66d7a0f53ed37b91a2b66a9c005c87667",
+      "table_meta": "{'task': 'Isaac-Lift-Box-DualFR3-Plate-Sim2Real-100Hz-Light-Margin-Play-v0', 'gap': 0.04, 'grip_dz': 0.05, 'box_dx': [-0.05, 0.02], 'null': 0.1, 'lim_k': 1.0, 'seed': 0}",
+      "rows": 3976,
+      "box_pos_noise_m": 0.01,
+      "box_yaw_noise_rad": 0.05,
+      "joint_noise_rad": 0.01,
+      "arrays": {
+        "joint_position": "pregrasp_joint_position",
+        "box_pose_base": "pregrasp_box_pose_base"
+      },
+      "box_ranges_base": {
+        "x": [
+          0.4370863342285156,
+          0.530294189453125
+        ],
+        "y": [
+          -0.11654926300048828,
+          0.11671234130859375
+        ],
+        "yaw": [
+          -0.16416232910955397,
+          0.16137809031314643
+        ]
+      }
+    }
+  },
+  "ended_at": "2026-11-04T15:31:39.304851+09:00",
+  "end_reason": "operator stop",
+  "trace_rows": 90
+}

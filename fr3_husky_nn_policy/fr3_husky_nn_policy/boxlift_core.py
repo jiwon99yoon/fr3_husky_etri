@@ -125,6 +125,47 @@ def canonicalize_box_quat(q: np.ndarray) -> np.ndarray:
     return chosen * np.where(chosen[..., 3:4] >= 0.0, 1.0, -1.0)
 
 
+
+def quat_to_rpy(q) -> np.ndarray:
+    """(roll, pitch, yaw) in rad, ZYX convention (as URDF rpy), of a quaternion (x, y, z, w)."""
+    x, y, z, w = normalize_quat(q)
+    return np.array([np.arctan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y)),
+                     np.arcsin(np.clip(2.0 * (w * y - z * x), -1.0, 1.0)),
+                     np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))])
+
+
+def box_goal_error(box_position_b, box_quat_b, goal, start_quat_b=None) -> dict:
+    """Box pose vs goal at the end of a session (base frame): position error and orientation in degrees.
+
+    The goal is position only (its orientation is the fixed identity, not tracked); training penalizes box
+    tilt (``box_upright``), so ``tilt_deg`` (box z axis vs base z) is the orientation number to compare.
+    Box quaternions are canonicalized for the half-turn symmetry first. ``rpy_error_deg`` = box - goal rpy,
+    ``rpy_change_deg`` = box - start rpy (wrapped to [-180, 180)).
+    """
+    goal = np.asarray(goal, dtype=np.float64)
+    position = np.asarray(box_position_b, dtype=np.float64)
+    error = position - goal[:3]
+    quat = canonicalize_box_quat(box_quat_b)
+    rpy, goal_rpy = quat_to_rpy(quat), quat_to_rpy(goal[3:7])
+    wrap = lambda a: (a + np.pi) % (2.0 * np.pi) - np.pi
+    summary = {
+        "box_position_base": position.round(4).tolist(),
+        "goal_position_base": goal[:3].round(4).tolist(),
+        "error_xyz_m": error.round(4).tolist(),
+        "error_xy_m": round(float(np.linalg.norm(error[:2])), 4),
+        "error_m": round(float(np.linalg.norm(error)), 4),
+        "box_rpy_deg": np.degrees(rpy).round(2).tolist(),
+        "goal_rpy_deg": np.degrees(goal_rpy).round(2).tolist(),
+        "rpy_error_deg": np.degrees(wrap(rpy - goal_rpy)).round(2).tolist(),
+        "tilt_deg": round(float(np.degrees(np.arccos(np.clip(1.0 - 2.0 * (quat[0] ** 2 + quat[1] ** 2), -1.0, 1.0)))), 2),
+    }
+    if start_quat_b is not None:
+        start_rpy = quat_to_rpy(canonicalize_box_quat(start_quat_b))
+        summary["start_rpy_deg"] = np.degrees(start_rpy).round(2).tolist()
+        summary["rpy_change_deg"] = np.degrees(wrap(rpy - start_rpy)).round(2).tolist()
+    return summary
+
+
 # --------------------------------------------------------------------------- manifest
 def _pair(value, name: str) -> np.ndarray:
     pair = np.asarray(value, dtype=np.float64)
@@ -321,11 +362,25 @@ def _outside(value: np.ndarray, bounds: np.ndarray) -> bool:
     return bool(np.any(value < bounds[:, 0] - 1e-9) or np.any(value > bounds[:, 1] + 1e-9))
 
 
-def check_goal_settings(goal_z: float, xy_offset: Sequence[float], manifest: BoxLiftManifest) -> np.ndarray:
+# Where goal_xy_offset_m is measured from: the box start x/y latched at start_policy (training's own rule), or
+# the center of the trained absolute goal range (manifest goal.xy_range_base), a fixed point in base.
+GOAL_XY_REFERENCES = ("box_start", "range_center")
+
+
+def goal_range_center(manifest: BoxLiftManifest) -> np.ndarray:
+    if manifest.goal_xy_range is None:
+        raise ValueError("goal_xy_reference range_center needs a checkpoint with an absolute goal range "
+                         "(manifest goal.xy_range_base); this one trains the goal relative to the box start")
+    return manifest.goal_xy_range.mean(axis=1)
+
+
+def check_goal_settings(goal_z: float, xy_offset: Sequence[float], manifest: BoxLiftManifest,
+                        reference: str = "box_start") -> np.ndarray:
     """Check the operator goal settings that do not depend on where the box is; returns the offset.
 
-    Offset-range manifests check the offset itself. Absolute-range manifests can only reject an offset that no
-    trained box start reaches (goal range minus start range); make_goal checks the actual goal.
+    ``range_center``: center + offset must lie in the trained goal range. ``box_start``: offset-range manifests
+    check the offset itself; absolute-range manifests can only reject an offset that no trained box start
+    reaches (goal range minus start range), make_goal checks the actual goal.
     """
     low, high = manifest.goal_z_range
     if not (np.isfinite(goal_z) and low <= goal_z <= high):
@@ -333,6 +388,17 @@ def check_goal_settings(goal_z: float, xy_offset: Sequence[float], manifest: Box
     xy_offset = np.asarray(xy_offset, dtype=np.float64)
     if xy_offset.shape != (2,) or not np.all(np.isfinite(xy_offset)):
         raise ValueError(f"goal xy offset must be two finite values, got {xy_offset!r}")
+    if reference not in GOAL_XY_REFERENCES:
+        raise ValueError(f"goal_xy_reference must be one of {GOAL_XY_REFERENCES}, got {reference!r}")
+    if reference == "range_center":
+        center = goal_range_center(manifest)
+        allowed = manifest.goal_xy_range - center[:, None]
+        if _outside(xy_offset, allowed):
+            raise ValueError(
+                f"goal xy offset {xy_offset.tolist()} from the goal range center {center.round(4).tolist()} is "
+                f"outside the trained goal range (offsets x {allowed[0].round(4).tolist()}, "
+                f"y {allowed[1].round(4).tolist()}, base frame)")
+        return xy_offset
     if manifest.goal_xy_range is None:
         offset_range = manifest.goal_xy_offset_range
         if _outside(xy_offset, offset_range):
@@ -353,15 +419,22 @@ def check_goal_settings(goal_z: float, xy_offset: Sequence[float], manifest: Box
     return xy_offset
 
 
+def goal_xy_from_settings(start_xy: Sequence[float], xy_offset: Sequence[float], manifest: BoxLiftManifest,
+                          reference: str = "box_start") -> np.ndarray:
+    """Goal x/y without range checks (RViz preview): reference point + offset."""
+    base = goal_range_center(manifest) if reference == "range_center" else np.asarray(start_xy, dtype=np.float64)
+    return base + np.asarray(xy_offset, dtype=np.float64)
+
+
 def make_goal(start_xy: Sequence[float], goal_z: float, manifest: BoxLiftManifest,
-              xy_offset: Sequence[float] = (0.0, 0.0)) -> np.ndarray:
-    """Goal term: box start x/y + xy_offset, chosen lift height z, identity quaternion (x, y, z, w)."""
+              xy_offset: Sequence[float] = (0.0, 0.0), reference: str = "box_start") -> np.ndarray:
+    """Goal term: reference x/y (box start, or the goal range center) + xy_offset, lift height z, identity quat."""
     start_xy = np.asarray(start_xy, dtype=np.float64)
     if start_xy.shape != (2,) or not np.all(np.isfinite(start_xy)):
         raise ValueError(f"start_xy must be two finite values, got {start_xy!r}")
-    xy_offset = check_goal_settings(goal_z, xy_offset, manifest)
-    goal_xy = start_xy + xy_offset
-    if manifest.goal_xy_range is not None and _outside(goal_xy, manifest.goal_xy_range):
+    xy_offset = check_goal_settings(goal_z, xy_offset, manifest, reference)
+    goal_xy = goal_xy_from_settings(start_xy, xy_offset, manifest, reference)
+    if reference == "box_start" and manifest.goal_xy_range is not None and _outside(goal_xy, manifest.goal_xy_range):
         raise ValueError(
             f"goal xy {goal_xy.round(4).tolist()} (box start {start_xy.round(4).tolist()} + offset "
             f"{xy_offset.tolist()}) is outside the trained goal range x {manifest.goal_xy_range[0].tolist()}, "

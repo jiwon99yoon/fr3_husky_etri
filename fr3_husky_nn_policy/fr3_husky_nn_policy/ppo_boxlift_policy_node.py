@@ -18,10 +18,14 @@ start_policy is refused unless the arms and the box are inside the start distrib
 trained on: the ready pose for ``start.mode=ready_pose``, or one row of the pre-grasp table embedded in
 the NPZ for ``start.mode=pregrasp_table`` (move the arms there with MoveIt first, then place the box).
 
-Goal: start_policy latches box start x/y + ``goal_xy_offset_m`` and the lift height ``goal_z_m``. Both can be
+Goal: start_policy latches reference x/y + ``goal_xy_offset_m`` and the lift height ``goal_z_m``. The reference
+(``goal_xy_reference``) is the box start x/y (default, training's rule) or ``range_center``, the center of the
+trained absolute goal range (a fixed point, independent of where the box is). All three can be
 changed between sessions with ``ros2 param set`` (refused while a session is PENDING/RUNNING or outside
 training). A checkpoint trained with an absolute goal x/y range (manifest ``goal.xy_range_base``) refuses
 start_policy when box start + offset leaves that range; the IDLE goal preview marker is red then.
+RViz also gets the box as the policy sees it (``~/box_marker``, orange) and the trained box start centers
+(``~/start_range_markers``, latched).
 
 WARNING: stopping for any reason (stop service, fault, Ctrl-C, controller abort) ends the controller
 goal. The controller then holds the measured joint positions, which releases the plate squeeze, so a
@@ -52,12 +56,16 @@ from rclpy.time import Time as RosTime
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
-from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Point
+from visualization_msgs.msg import Marker, MarkerArray
 
 from .boxlift_core import (
     GOAL_QUAT_XYZW,
+    box_goal_error,
+    START_PREGRASP_TABLE,
     canonicalize_box_quat,
     check_goal_settings,
+    goal_xy_from_settings,
     check_start_conditions,
     build_observation,
     load_boxlift_policy,
@@ -67,7 +75,7 @@ from .boxlift_core import (
     transform_pose,
     yaw_from_quat,
 )
-from .boxlift_logger import BoxLiftRunLogger
+from .boxlift_logger import BoxLiftRunLogger, append_session_result
 from .observation import DUAL_ARM_JOINT_NAMES
 
 # RunPolicyControl fields that the Isaac-style direct-PD path (isaac_relative_control=True) ignores.
@@ -95,6 +103,7 @@ class PPOBoxLiftPolicyNode(Node):
         self.declare_parameter("control_action", "/fr3_policy_control")
         self.declare_parameter("goal_z_m", 0.15)
         self.declare_parameter("goal_xy_offset_m", [0.0, 0.0])
+        self.declare_parameter("goal_xy_reference", "box_start")  # or range_center
         self.declare_parameter("joint_state_timeout_s", 0.15)
         self.declare_parameter("box_pose_timeout_s", 0.30)
         self.declare_parameter("command_timeout_s", 0.15)
@@ -109,6 +118,8 @@ class PPOBoxLiftPolicyNode(Node):
         self.declare_parameter("shadow_mode", True)
         self.declare_parameter("log_root", "")
         self.declare_parameter("log_task_name", "dual_fr3_boxlift")
+        # per-session summary CSV (final box vs goal); "" = <repo>/experi_result
+        self.declare_parameter("result_root", "")
 
         model_path = str(self.get_parameter("model_path").value).strip()
         if not model_path:
@@ -118,8 +129,8 @@ class PPOBoxLiftPolicyNode(Node):
             model_path, self.box_size, float(self.get_parameter("box_size_tolerance_m").value)
         )
         # fail at startup if z or the x/y offset is outside training; later changes are checked in _on_set_parameters
-        goal_z, goal_xy_offset = self._goal_settings()
-        check_goal_settings(goal_z, goal_xy_offset, self.manifest)
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
+        check_goal_settings(goal_z, goal_xy_offset, self.manifest, goal_reference)
         self.max_policy_target_delta = float(self.get_parameter("max_policy_target_delta_rad").value)
         if not (float(self.manifest.action_clip[1]) < self.max_policy_target_delta <= 1.0):
             raise ValueError(
@@ -150,6 +161,8 @@ class PPOBoxLiftPolicyNode(Node):
         self.session_start_ns = 0
         self.last_tick_ns = 0
         self.horizon_warned = False
+        self.final_box_pose = None
+        self.result_recorded = False
         self.feedback_max_joint_error = float("nan")
         self.feedback_command_age = float("nan")
         self.end_reason = ""
@@ -180,6 +193,12 @@ class PPOBoxLiftPolicyNode(Node):
                        durability=DurabilityPolicy.TRANSIENT_LOCAL),
         )
         self.box_marker_publisher = self.create_publisher(Marker, "~/box_marker", 1)
+        self.start_range_publisher = self.create_publisher(
+            MarkerArray, "~/start_range_markers",
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
+        self.start_range_publisher.publish(self._start_range_markers())
         self.action_client = ActionClient(self, RunPolicyControl, self.get_parameter("control_action").value)
         self.create_service(Trigger, "~/start_policy", self._start_service)
         self.create_service(Trigger, "~/stop_policy", self._stop_service)
@@ -198,27 +217,30 @@ class PPOBoxLiftPolicyNode(Node):
             f"start {self.manifest.start_mode}"
             + ("" if self.manifest.pregrasp_joint_position is None
                else f" ({len(self.manifest.pregrasp_joint_position)} table rows)")
-            + f", goal z {goal_z:.3f} m, goal xy offset {goal_xy_offset.tolist()} m ({trained_xy}), "
+            + f", goal z {goal_z:.3f} m, goal xy {goal_reference} + {goal_xy_offset.tolist()} m ({trained_xy}), "
             f"mode {'SHADOW' if self.shadow_mode else 'COMMAND'}"
         )
 
     # ------------------------------------------------------------------ goal settings
-    def _goal_settings(self) -> tuple[float, np.ndarray]:
-        """Current goal_z_m and goal_xy_offset_m (read at every start_policy and IDLE preview)."""
+    def _goal_settings(self) -> tuple[float, np.ndarray, str]:
+        """Current goal_z_m, goal_xy_offset_m, goal_xy_reference (read at every start_policy and IDLE preview)."""
         return (float(self.get_parameter("goal_z_m").value),
-                np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64))
+                np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64),
+                str(self.get_parameter("goal_xy_reference").value))
 
     def _on_set_parameters(self, parameters) -> SetParametersResult:
-        changed = {p.name: p.value for p in parameters if p.name in ("goal_z_m", "goal_xy_offset_m")}
+        changed = {p.name: p.value for p in parameters
+                   if p.name in ("goal_z_m", "goal_xy_offset_m", "goal_xy_reference")}
         if not changed:
             return SetParametersResult(successful=True)
         if self.state != "IDLE":
             return SetParametersResult(successful=False,
                                        reason=f"goal settings can only change while IDLE (session {self.state})")
-        goal_z, goal_xy_offset = self._goal_settings()
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
         try:
             check_goal_settings(float(changed.get("goal_z_m", goal_z)),
-                                changed.get("goal_xy_offset_m", goal_xy_offset), self.manifest)
+                                changed.get("goal_xy_offset_m", goal_xy_offset), self.manifest,
+                                str(changed.get("goal_xy_reference", goal_reference)))
         except (TypeError, ValueError) as error:
             return SetParametersResult(successful=False, reason=str(error))
         self.get_logger().info(
@@ -308,10 +330,10 @@ class PPOBoxLiftPolicyNode(Node):
         if not start.ok:
             return False, "; ".join(start.reasons)
         # Training: the goal x/y is the box start x/y (+ the trained offset), z is the lift height;
-        # previous action starts at 0.
-        goal_z, goal_xy_offset = self._goal_settings()
+        # previous action starts at 0. range_center: the goal range center + offset instead.
+        goal_z, goal_xy_offset, goal_reference = self._goal_settings()
         try:
-            goal_base = make_goal(self.box_position_b[:2], goal_z, self.manifest, goal_xy_offset)
+            goal_base = make_goal(self.box_position_b[:2], goal_z, self.manifest, goal_xy_offset, goal_reference)
         except ValueError as error:
             return False, str(error)
         self.start_table_row = start.table_row
@@ -325,6 +347,8 @@ class PPOBoxLiftPolicyNode(Node):
         self.previous_action.fill(0.0)
         self.step_index = 0
         self.horizon_warned = False
+        self.final_box_pose = None
+        self.result_recorded = False
         self.feedback_max_joint_error = float("nan")
         self.feedback_command_age = float("nan")
         self.end_reason = ""
@@ -334,7 +358,7 @@ class PPOBoxLiftPolicyNode(Node):
 
         row = "" if self.start_table_row is None else f", pre-grasp table row {self.start_table_row}"
         row += (f", goal {np.round(self.goal[:3], 3).tolist()} m "
-                f"(box start + offset {goal_xy_offset.tolist()}, z {goal_z})")
+                f"({goal_reference} + offset {goal_xy_offset.tolist()}, z {goal_z})")
         if self.shadow_mode:
             self.state = "RUNNING"
             return True, f"shadow session started{row} (inference and logging only, no commands)"
@@ -399,6 +423,9 @@ class PPOBoxLiftPolicyNode(Node):
         self._stop_controller_or_end()
 
     def _stop_controller_or_end(self) -> None:
+        # the box as the policy last saw it, before the controller releases the squeeze (a held box drops then)
+        if self.final_box_pose is None and self.box_position_b is not None:
+            self.final_box_pose = (self.box_position_b.copy(), self.box_quat_b.copy())
         if self.goal_handle is not None:
             # The result callback closes the session once the controller has stopped.
             self.goal_handle.cancel_goal_async()
@@ -410,9 +437,66 @@ class PPOBoxLiftPolicyNode(Node):
         self.state = "IDLE"
         self.goal_handle = None
         if self.logger_ is not None:
+            pose = self.final_box_pose or (
+                None if self.box_position_b is None else (self.box_position_b, self.box_quat_b))
+            if pose is not None and self.goal is not None:
+                if self.result_recorded:  # row already written at the trained episode end; keep the stop pose too
+                    self.logger_.metadata["box_vs_goal_at_session_end"] = box_goal_error(
+                        *pose, self.goal, self.logger_.metadata.get("box_start_quat_base_raw"))
+                else:  # ended before the trained episode length
+                    self._record_result_safely(reason, *pose)
             run_dir = self.logger_.finalize(reason)
             self.get_logger().info(f"Session ended ({reason}); {self.logger_.row_count} steps logged to {run_dir}")
             self.logger_ = None
+        self.final_box_pose = None
+
+    def _record_result_safely(self, reason: str, box_position, box_quat) -> None:
+        self.result_recorded = True
+        try:
+            self._record_result(reason, box_position, box_quat)
+        except Exception as error:  # never lose the trace/metadata over the summary
+            self.get_logger().error(f"Failed to record the session result: {error!r}")
+
+    def _record_result(self, reason: str, box_position, box_quat) -> None:
+        """Final box vs goal: into metadata.json and one row of <result_root>/<task>/results.csv."""
+        metadata = self.logger_.metadata
+        final = box_goal_error(box_position, box_quat, self.goal, metadata.get("box_start_quat_base_raw"))
+        metadata["final_box_vs_goal"] = final
+        e, rpy = final["error_xyz_m"], final["rpy_error_deg"]
+        self.get_logger().info(
+            f"Final box vs goal: error x {e[0]:+.3f} y {e[1]:+.3f} z {e[2]:+.3f} m (|xyz| {final['error_m']:.3f}), "
+            f"rpy error {rpy[0]:+.1f} {rpy[1]:+.1f} {rpy[2]:+.1f} deg, tilt {final['tilt_deg']:.1f} deg")
+        start = np.asarray(metadata["box_start_position_base"], dtype=np.float64)
+        offset = self.get_parameter("goal_xy_offset_m").value
+        row = {
+            "session": self.logger_.run_dir.name,
+            "model": Path(str(self.actor.model_path)).name,
+            "mode": metadata["mode"],
+            "end_reason": reason,
+            "steps": self.logger_.row_count,
+            "duration_s": round(self.logger_.row_count * self.manifest.policy_dt, 2),
+            "goal_xy_reference": str(self.get_parameter("goal_xy_reference").value),
+            "goal_xy_offset_x": float(offset[0]),
+            "goal_xy_offset_y": float(offset[1]),
+            **{f"start_{a}": round(float(v), 4) for a, v in zip("xyz", start)},
+            **{f"goal_{a}": v for a, v in zip("xyz", final["goal_position_base"])},
+            **{f"final_{a}": v for a, v in zip("xyz", final["box_position_base"])},
+            **{f"error_{a}": v for a, v in zip("xyz", e)},
+            "error_xy_norm": final["error_xy_m"],
+            "error_xyz_norm": final["error_m"],
+            **{f"final_{a}_deg": v for a, v in zip(("roll", "pitch", "yaw"), final["box_rpy_deg"])},
+            **{f"error_{a}_deg": v for a, v in zip(("roll", "pitch", "yaw"), rpy)},
+            **{f"change_{a}_deg": v for a, v in zip(("roll", "pitch", "yaw"), final.get("rpy_change_deg", [None] * 3))},
+            "tilt_deg": final["tilt_deg"],
+            "log_dir": str(self.logger_.run_dir),
+        }
+        configured = str(self.get_parameter("result_root").value).strip()
+        root = Path(configured).expanduser() if configured else Path(__file__).resolve().parents[2] / "experi_result"
+        try:
+            path = append_session_result(root / str(self.get_parameter("log_task_name").value) / "results.csv", row)
+            self.get_logger().info(f"Session result appended to {path}")
+        except OSError as error:
+            self.get_logger().error(f"Failed to write the session result: {error}")
 
     def _open_log(self) -> None:
         configured = str(self.get_parameter("log_root").value).strip()
@@ -421,7 +505,7 @@ class PPOBoxLiftPolicyNode(Node):
             name: self.get_parameter(name).value
             for name in (
                 "box_size_m", "box_size_tolerance_m", "joint_states_topic", "box_pose_topic", "box_position_offset_m", "base_frame",
-                "goal_z_m", "goal_xy_offset_m", "joint_state_timeout_s", "box_pose_timeout_s", "command_timeout_s", "max_duration_s",
+                "goal_z_m", "goal_xy_offset_m", "goal_xy_reference", "joint_state_timeout_s", "box_pose_timeout_s", "command_timeout_s", "max_duration_s",
                 "max_policy_target_delta_rad", "ready_tolerance_rad", "start_position_margin_m",
                 "start_yaw_margin_rad", "rest_z_tolerance_m", "pregrasp_joint_margin_rad", "shadow_mode",
             )
@@ -465,6 +549,37 @@ class PPOBoxLiftPolicyNode(Node):
         marker.color.r, marker.color.g, marker.color.b, marker.color.a = rgba
         return marker
 
+    def _start_range_markers(self) -> MarkerArray:
+        """Trained box start centers (pre-grasp table rows) and their x/y bounds, drawn at the box top face."""
+        z = self.manifest.rest_center_z + 0.5 * float(self.box_size[2]) + 0.002
+        markers = []
+        if self.manifest.start_mode == START_PREGRASP_TABLE:
+            xy = self.manifest.pregrasp_box_pose[:, :2]
+            noise = self.manifest.start_box_pos_noise
+            low, high = xy.min(axis=0) - noise, xy.max(axis=0) + noise
+            centers = Marker()
+            centers.header.frame_id = self.base_frame
+            centers.ns, centers.id, centers.type, centers.action = "start_centers", 0, Marker.POINTS, Marker.ADD
+            centers.pose.orientation.w = 1.0
+            centers.scale.x = centers.scale.y = 0.004
+            centers.color.r, centers.color.g, centers.color.b, centers.color.a = 0.2, 0.6, 1.0, 0.8
+            centers.points = [Point(x=float(px), y=float(py), z=z) for px, py in xy]
+            markers.append(centers)
+        else:
+            low = np.array([self.manifest.start_x_range[0], self.manifest.start_y_range[0]])
+            high = np.array([self.manifest.start_x_range[1], self.manifest.start_y_range[1]])
+        bounds = Marker()
+        bounds.header.frame_id = self.base_frame
+        bounds.ns, bounds.id, bounds.type, bounds.action = "start_bounds", 0, Marker.LINE_STRIP, Marker.ADD
+        bounds.pose.orientation.w = 1.0
+        bounds.scale.x = 0.003
+        bounds.color.r, bounds.color.g, bounds.color.b, bounds.color.a = 0.2, 0.6, 1.0, 1.0
+        bounds.points = [Point(x=float(px), y=float(py), z=z) for px, py in
+                         ((low[0], low[1]), (high[0], low[1]), (high[0], high[1]), (low[0], high[1]),
+                          (low[0], low[1]))]
+        markers.append(bounds)
+        return MarkerArray(markers=markers)
+
     def _tick(self) -> None:
         if self.box_position_b is not None:
             self.box_marker_publisher.publish(
@@ -473,15 +588,18 @@ class PPOBoxLiftPolicyNode(Node):
             if self.state == "IDLE":
                 # Preview: the goal start_policy would latch for the box where it is now
                 # (red: outside the trained goal range for this box position, start_policy refuses it).
-                goal_z, goal_xy_offset = self._goal_settings()
+                goal_z, goal_xy_offset, goal_reference = self._goal_settings()
                 rgba = (0.1, 0.9, 0.2, 0.35)
                 try:
-                    make_goal(self.box_position_b[:2], goal_z, self.manifest, goal_xy_offset)
+                    make_goal(self.box_position_b[:2], goal_z, self.manifest, goal_xy_offset, goal_reference)
+                    goal_xy = goal_xy_from_settings(self.box_position_b[:2], goal_xy_offset, self.manifest,
+                                                    goal_reference)
                 except ValueError as error:
                     rgba = (0.9, 0.1, 0.1, 0.35)
                     self._log_status(f"idle: {error}")
+                    goal_xy = self.box_position_b[:2] + goal_xy_offset
                 self.goal_marker_publisher.publish(self._box_marker(
-                    "goal", np.append(self.box_position_b[:2] + goal_xy_offset, goal_z), GOAL_QUAT_XYZW, rgba))
+                    "goal", np.append(goal_xy, goal_z), GOAL_QUAT_XYZW, rgba))
         if self.state != "RUNNING":
             if self.state == "IDLE":
                 ready, message = self._inputs_ready()
@@ -555,6 +673,11 @@ class PPOBoxLiftPolicyNode(Node):
                 f"Past the trained episode length ({self.manifest.episode_length_s:.1f} s); "
                 "the policy never saw this phase in training."
             )
+            # the result row is the box at the trained episode end; the policy keeps running (and holding)
+            if self.logger_ is not None and not self.result_recorded:
+                self._record_result_safely(
+                    f"trained episode end ({self.manifest.episode_length_s:.1f} s)",
+                    self.box_position_b, self.box_quat_b)
 
 
 def main(args: Optional[list[str]] = None):
@@ -566,7 +689,10 @@ def main(args: Optional[list[str]] = None):
         pass
     finally:
         if node.goal_handle is not None:
-            node.goal_handle.cancel_goal_async()
+            try:
+                node.goal_handle.cancel_goal_async()
+            except Exception:  # context already shut down by Ctrl-C; the controller stops on command timeout
+                pass
         node._end_session(node.end_reason or "node shutdown")
         node.destroy_node()
         if rclpy.ok():

@@ -11,6 +11,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -46,6 +47,11 @@ def generate_launch_description():
             {
                 "model_path": LaunchConfiguration("model_path"),
                 "object_pose_topic": LaunchConfiguration("object_pose_topic"),
+                "object_position_offset_m": ParameterValue(LaunchConfiguration("object_position_offset_m"),
+                                                           value_type=list[float]),
+                "goal_z_m": ParameterValue(LaunchConfiguration("goal_z_m"), value_type=float),
+                "goal_xy_offset_m": ParameterValue(LaunchConfiguration("goal_xy_offset_m"), value_type=list[float]),
+                "goal_xy_reference": LaunchConfiguration("goal_xy_reference"),
                 "shadow_mode": LaunchConfiguration("shadow_mode"),
                 "auto_start": LaunchConfiguration("auto_start"),
             },
@@ -62,7 +68,18 @@ def generate_launch_description():
             DeclareLaunchArgument("launch_move_group", default_value="false"),
             DeclareLaunchArgument("shadow_mode", default_value="true"),
             DeclareLaunchArgument("auto_start", default_value="false"),
-            DeclareLaunchArgument("object_pose_topic", default_value="/object_pose"),
+            DeclareLaunchArgument("object_pose_topic", default_value="/object_pose",
+                                  description="PoseStamped of the cube centre, any frame with a TF to base"),
+            DeclareLaunchArgument("object_position_offset_m", default_value="[0.0, 0.0, 0.0]",
+                                  description="added to the cube position in base before the policy sees it"),
+            DeclareLaunchArgument("goal_z_m", default_value="0.50",
+                                  description="goal z in base (trained 0.45-0.60; table top 0.345)"),
+            DeclareLaunchArgument("goal_xy_offset_m", default_value="[0.0, 0.0]",
+                                  description="goal x/y = reference x/y + this (base), must stay in the trained "
+                                              "goal range x 0.35-0.55, y -0.45--0.15"),
+            DeclareLaunchArgument("goal_xy_reference", default_value="range_center",
+                                  description="range_center (0.45, -0.30, center of the trained goal range) or "
+                                              "cube_start (cube x/y at start_policy)"),
             DeclareLaunchArgument(
                 "model_path",
                 default_value=PathJoinSubstitution(

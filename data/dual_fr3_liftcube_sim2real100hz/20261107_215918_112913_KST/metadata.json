@@ -1,0 +1,162 @@
+{
+  "started_at": "2026-11-07T21:59:18.112913+09:00",
+  "model_path": "/home/husky-rcu/jw_ws/install/fr3_husky_nn_policy/share/fr3_husky_nn_policy/models/dual_fr3_lift_sim2real100hz_model4999.npz",
+  "model_source_sha256": "7e2482d296c2d24237d8cfbb36a3ed7a86edf355c950785349b05d9c8717a6e8",
+  "mode": "command",
+  "target_position_base": [
+    0.45,
+    -0.3,
+    0.55
+  ],
+  "cube_start_position_base": [
+    0.4324952098299134,
+    -0.30488707535079174,
+    0.39546857326943774
+  ],
+  "cube_start_quat_base": [
+    0.0062906546720956635,
+    0.033128920475438584,
+    0.051677290936464476,
+    -0.9980943642228408
+  ],
+  "joint_start_position": [
+    -0.5222334265708923,
+    -0.78604656457901,
+    0.0027109968941658735,
+    -2.3546552658081055,
+    -0.004458373878151178,
+    1.5750799179077148,
+    0.7984488606452942,
+    0.522523045539856,
+    -0.7853010892868042,
+    -0.0014211415546014905,
+    -2.3541712760925293,
+    0.00569129316136241,
+    1.574690818786621,
+    0.7721344232559204,
+    0.03992205113172531,
+    0.03992205113172531
+  ],
+  "joint_names": [
+    "left_fr3_joint1",
+    "left_fr3_joint2",
+    "left_fr3_joint3",
+    "left_fr3_joint4",
+    "left_fr3_joint5",
+    "left_fr3_joint6",
+    "left_fr3_joint7",
+    "right_fr3_joint1",
+    "right_fr3_joint2",
+    "right_fr3_joint3",
+    "right_fr3_joint4",
+    "right_fr3_joint5",
+    "right_fr3_joint6",
+    "right_fr3_joint7",
+    "right_fr3_finger_joint1",
+    "right_fr3_finger_joint2"
+  ],
+  "parameters": {
+    "joint_states_topic": "/dual_fr3/joint_states",
+    "gripper_joint_states_topic": "/right_franka_gripper/joint_states",
+    "object_pose_topic": "/cube_tf",
+    "object_position_offset_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "base_frame": "base",
+    "gripper_action_ns": "/right_franka_gripper",
+    "policy_rate_hz": 20.0,
+    "joint_state_timeout_s": 0.15,
+    "object_pose_timeout_s": 0.2,
+    "command_timeout_s": 0.15,
+    "max_duration_s": 8.0,
+    "max_policy_target_delta_rad": 0.2,
+    "ready_tolerance_rad": 0.2,
+    "control_gripper": true,
+    "gripper_hysteresis": 0.1,
+    "grasp_width_m": 0.0,
+    "grasp_speed_mps": 0.1,
+    "grasp_force_n": 30.0,
+    "grasp_epsilon_m": 0.08,
+    "open_width_m": 0.08,
+    "open_speed_mps": 0.1,
+    "goal_z_m": 0.55,
+    "goal_xy_offset_m": [
+      0.0,
+      0.0
+    ],
+    "goal_xy_reference": "range_center",
+    "target_min": [
+      0.35,
+      -0.45,
+      0.45
+    ],
+    "target_max": [
+      0.55,
+      -0.15,
+      0.6
+    ],
+    "object_start_min": [
+      0.36,
+      -0.38,
+      0.365
+    ],
+    "object_start_max": [
+      0.54,
+      -0.12,
+      0.425
+    ],
+    "shadow_mode": false
+  },
+  "final_cube_vs_goal": {
+    "box_position_base": [
+      0.4256,
+      -0.3033,
+      0.3942
+    ],
+    "goal_position_base": [
+      0.45,
+      -0.3,
+      0.55
+    ],
+    "error_xyz_m": [
+      -0.0244,
+      -0.0033,
+      -0.1558
+    ],
+    "error_xy_m": 0.0246,
+    "error_m": 0.1578,
+    "box_rpy_deg": [
+      -0.48,
+      -4.56,
+      -7.72
+    ],
+    "goal_rpy_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rpy_error_deg": [
+      -0.48,
+      -4.56,
+      -7.72
+    ],
+    "tilt_deg": 4.59,
+    "start_rpy_deg": [
+      -0.52,
+      -3.83,
+      -5.91
+    ],
+    "rpy_change_deg": [
+      0.05,
+      -0.73,
+      -1.81
+    ],
+    "cube_pose_age_ms": 23.4
+  },
+  "ended_at": "2026-11-07T21:59:19.012456+09:00",
+  "end_reason": "fault: joint state is stale",
+  "trace_rows": 15,
+  "gripper_events": 2
+}

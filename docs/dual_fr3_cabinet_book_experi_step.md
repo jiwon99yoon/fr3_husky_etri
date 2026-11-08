@@ -264,6 +264,75 @@ ros2 launch fr3_husky_nn_policy dual_fr3_cabinet_book_insert_policy.launch.py \
 - 왼손이 손잡이에서 미끄러지거나 수납장이 밀리면 바로 정지한다.
 - 볼 것: 문이 85° 넘게 열리기 전에 책이 대기선(y −0.14)을 넘는지. 넘으면 7498과 같은 문제다.
 
+### 책 시작 위치 10곳 시험 (오른팔 시작 행, 2026-11-08)
+
+학습은 에피소드마다 NPZ 시작 표 121행(책 중심 x 0.53~0.73, y −0.49~−0.29, 2 cm 간격 11 × 11) 중 하나를 골랐다. 행 번호 = 11·ix + iy, 책 x = 0.53 + 0.02·ix, y = −0.49 + 0.02·iy, z는 모두 0.456이다. 왼팔은 121행 모두 같고, 2998과 2000(curriculum)은 같은 표를 쓴다.
+
+범위를 고르게 덮는 10행이다. 쉬운 순서로 적었다. `--arm`을 꼭 준다. 빼면 기본값 `both`라 다른 팔이 ready로 간다.
+
+```bash
+# 왼팔 (모든 행 공통, 문 닫힘)
+ros2 run fr3_husky_task_manager move_to_joint --arm left --left-target-positions -0.4463 -0.1901 -0.4999 -1.8995 0.3425 2.4281 0.1574
+
+# 1. 행 60 (0.63, -0.39) 가운데
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7872 -0.4824 -0.5670 -2.3592 -0.0158 2.6981 0.4468
+# 2. 행 82 (0.67, -0.39) 가운데에서 4 cm 뒤
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7185 -0.3254 -0.4825 -2.2499 0.1877 2.7065 0.3212
+# 3. 행 5 (0.53, -0.39) 앞 변 가운데
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.6160 -0.8020 -0.4859 -2.5808 -0.1273 2.5912 0.4724
+# 4. 행 115 (0.73, -0.39) 뒤 변 가운데
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.6101 -0.1202 -0.3623 -2.0614 0.3708 2.6825 0.2244
+# 5. 행 65 (0.63, -0.29) 왼쪽 변 가운데 (수납장 쪽)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.6734 -0.5074 -0.2852 -2.4440 -0.0656 2.7338 0.6774
+# 6. 행 55 (0.63, -0.49) 오른쪽 변 가운데
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 1.1791 -0.5952 -1.0555 -2.2028 -0.3068 2.6084 0.4778
+# 7. 행 0 (0.53, -0.49) 앞 오른쪽 모서리
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7084 -0.7211 -0.7354 -2.4223 -0.1064 2.5485 0.2696
+# 8. 행 10 (0.53, -0.29) 앞 왼쪽 모서리
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.5897 -0.8567 -0.2467 -2.6738 -0.1248 2.6115 0.6934
+# 9. 행 110 (0.73, -0.49) 뒤 오른쪽 모서리
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.5715 0.0064 -0.5045 -1.8959 0.5965 2.5493 -0.0597
+# 10. 행 120 (0.73, -0.29) 뒤 왼쪽 모서리
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7072 -0.1863 -0.2949 -2.1558 0.0981 2.7561 0.5810
+```
+
+- 행 55는 오른팔 1번 관절이 1.18 rad로 가장 많이 돈다. 행 110은 2번 관절이 0.006 rad로 팔을 가장 앞으로 뻗는다. 옮기는 동안 주변을 비운다.
+- 다른 행이 필요하면 `ROW`만 바꿔 명령을 뽑는다:
+  ```bash
+  cd ~/jw_ws/src/fr3_husky && ROW=60 python3 -c "
+  import numpy as np,json,os
+  m=json.loads(str(np.load('fr3_husky_nn_policy/models/cabinet_book_insert_75cm_door_first_model_2998.npz',allow_pickle=True)['manifest_json'].item()))['start']
+  r=int(os.environ['ROW']); q=m['joint_position_rows'][r]; b=m['book_position_base_rows'][r]
+  print('book centre (base):',[round(v,3) for v in b])
+  print('ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions',' '.join('%.4f'%v for v in q[7:]))"
+  ```
+
+행마다 순서:
+1. 오른손을 열고 책을 치운 뒤 위 명령으로 옮긴다.
+2. RViz `Cabinet nearest start row`가 노랑인지 본다(빨강이면 자세가 어느 행과도 0.10 rad 안에 없다).
+3. 책을 세워 잡는다. 주황 책(`Cabinet book (policy input)`, FK 값)이 노란 책과 겹쳐야 한다.
+4. 문을 닫고 왼손이 손잡이를 잡았는지 본다(`door_angle` ≈ 0).
+5. `start_policy`. 로그의 `Nearest start row N`이 고른 행인지 본다.
+
+### 실로봇 결과 (2026-11-07 ~ 11-08)
+
+세션별 값은 `experi_result/dual_fr3_cabinet_book_insert/results.csv`에, trace는 `data/cabinet_book_insert/<세션>/`에 있다.
+값은 trace에서 다시 계산했다(책 위치 = obs 29~31 + goal, 문 각도 = FK 노드 값). 끝난 이유는 노드가 남기지 않아 없다.
+오차는 마지막 step의 책 중심 − goal (0.795, 0.06, 0.54). 시작 위치는 중심 (0.66, −0.39) 기준 cm.
+
+| 정책 | 세션 | 시작 | 결과 |
+|---|---|---|---|
+| 2998 | 224557, 225244, 225853 | 중심, x+1 | 0.9 s 만에 멈춤(reflex). 문 93~103° |
+| 2998 | 230216, 230723 | x+1 | 12 s 끝. 책 오차 3.9 / 4.0 cm (x −3, y −2.4), 문 끝 80° |
+| 2000 | 230901, 231136 | x+1 | 오차 0.6 cm, 문 115° |
+| 2000 | 232933, 233134, 233300 | x+1 | 오차 3.1~3.4 cm (z +3), 문 148~152°. TF 기반 FK(15 Hz)일 때 값이라 문 각도를 그대로 믿기 어렵다 |
+| 2000 | 000029 ~ 004942 (13회) | 중심, ±1, ±4, y+8, x+6 y−5, x+8 y−6, x+8 y+6 | 13회 모두 마지막 오차 0.3~1.1 cm, 문 118~125° |
+
+- 2000은 시작 위치 13곳(x+8 두 곳은 학습 범위 밖) 모두 책을 1.1 cm 안에 넣었다.
+- 2998은 끝까지 간 2회 모두 책이 goal 4 cm 앞(x −3 cm)에서 멈췄고 문이 80°로 닫혀 들어왔다.
+- 1~2 cm 시작 차이는 결과에 영향이 없었다. 12 s보다 일찍 끝난 세션(178~218 step)은 손으로 멈춘 것으로 보인다.
+- rosbag은 두 개뿐이다. `bag_20261107_231106`(16 s)은 정책 실행 사이에 녹화돼 실행 장면이 없다. `bag_20261107_231127`(18 s)에는 2000 세션 231136의 앞 9 s만 들어 있다.
+
 ### 확인한 것 / 못 한 것 (2026-11-07, 학습 PC)
 
 - 확인

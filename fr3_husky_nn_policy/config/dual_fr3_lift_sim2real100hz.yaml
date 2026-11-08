@@ -4,14 +4,17 @@ ppo_liftcube_sim2real_policy_node:
   ros__parameters:
     joint_states_topic: /dual_fr3/joint_states                      # arm, ros2_control (1 kHz)
     gripper_joint_states_topic: /right_franka_gripper/joint_states  # right fingers
-    object_pose_topic: /object_pose   # ArUco cube centre, base frame
+    object_pose_topic: /object_pose   # cube centre PoseStamped, any frame with a TF to base
+    object_position_offset_m: [0.0, 0.0, 0.0]   # added in base (vision z bias)
+    object_size_m: [0.05, 0.05, 0.10]           # RViz marker only
     base_frame: base
     command_topic: /policy_joint_command
     control_action: /fr3_policy_control
     gripper_action_ns: /right_franka_gripper
 
     policy_rate_hz: 20.0
-    joint_state_timeout_s: 0.15
+    joint_state_timeout_s: 0.15          # arm
+    gripper_joint_state_timeout_s: 0.5   # fingers (franka_gripper ~10-20 Hz, gaps ~0.15 s)
     object_pose_timeout_s: 0.20     # the session stops if the cube pose is older than this
     command_timeout_s: 0.15
     max_duration_s: 8.0             # trained episode length
@@ -35,7 +38,13 @@ ppo_liftcube_sim2real_policy_node:
 
     # Training ranges, base frame (docs/dual_fr3_liftcube_real_setup.md). The real table front edge is x 0.40, so
     # put the cube at x >= 0.45.
-    target_position: [0.45, -0.30, 0.50]
+    # Goal (as in the box-lift node): reference x/y + goal_xy_offset_m, z = goal_z_m (absolute, base).
+    # range_center = (0.45, -0.30), the center of the trained goal range (training samples the goal uniformly in
+    # target_min/max, independent of the cube); cube_start = the cube x/y at start_policy. Change with
+    # `ros2 param set` while IDLE; a goal outside target_min/max is refused.
+    goal_z_m: 0.50
+    goal_xy_offset_m: [0.0, 0.0]      # range_center: x -0.10..+0.10, y -0.15..+0.15
+    goal_xy_reference: range_center
     target_min: [0.35, -0.45, 0.45]
     target_max: [0.55, -0.15, 0.60]
     object_start_min: [0.36, -0.38, 0.365]
@@ -45,3 +54,4 @@ ppo_liftcube_sim2real_policy_node:
 
     log_root: ""                    # empty: <package source>/data
     log_task_name: dual_fr3_liftcube_sim2real100hz
+    result_root: ""                 # empty: <repo>/experi_result (one results.csv row per session)

@@ -3,6 +3,11 @@
 The node consumes joint states plus book pose and positive-open door angle. The latter
 two inputs are deliberately separate: an FK estimator can publish them once the measured
 UMI-to-object and handle-to-door transforms have been calibrated.
+
+RViz (base frame): ``~/book_marker`` (the book as the policy sees it, orange), ``~/start_row_marker`` (book centre
+of the training start row nearest to the current joints, yellow when within start_joint_tolerance_rad, red
+otherwise) and ``~/range_markers`` (latched: the 121 trained book start centres and their bounds, blue; the insert
+goal, green).
 """
 
 from __future__ import annotations
@@ -19,15 +24,16 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from fr3_husky_msgs.action import RunPolicyControl
 from fr3_husky_msgs.msg import PolicyJointCommand
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point, PoseStamped
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time as RosTime
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
+from visualization_msgs.msg import Marker, MarkerArray
 
 from .boxlift_core import transform_pose
 from .cabinet_book_insert_core import (
@@ -64,6 +70,7 @@ class PPOCabinetBookInsertPolicyNode(Node):
         self.declare_parameter("relative_target_refresh_hz", 1000.0)
         self.declare_parameter("shadow_mode", True)
         self.declare_parameter("log_root", "")
+        self.declare_parameter("book_size_m", [0.15, 0.03, 0.22])  # RViz only: x insert, y grip thickness, z height
 
         model_path = str(self.get_parameter("model_path").value).strip()
         if not model_path:
@@ -118,6 +125,12 @@ class PPOCabinetBookInsertPolicyNode(Node):
         self.action_client = ActionClient(self, RunPolicyControl, self.get_parameter("control_action").value)
         self.create_service(Trigger, "~/start_policy", self._start_service)
         self.create_service(Trigger, "~/stop_policy", self._stop_service)
+        self.book_marker_publisher = self.create_publisher(Marker, "~/book_marker", 1)
+        self.start_row_marker_publisher = self.create_publisher(Marker, "~/start_row_marker", 1)
+        self.range_marker_publisher = self.create_publisher(
+            MarkerArray, "~/range_markers",
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.range_marker_publisher.publish(self._range_markers())
         self.timer = self.create_timer(self.manifest.policy_dt, self._tick)
 
         provenance = self.manifest.raw["provenance"]
@@ -339,7 +352,57 @@ class PPOCabinetBookInsertPolicyNode(Node):
             self.trace_writer = None
         self.get_logger().info(f"Session ended: {reason}")
 
+    # ------------------------------------------------------------------ RViz
+    def _marker(self, ns, marker_type, rgba):
+        marker = Marker()
+        marker.header.frame_id = self.base_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns, marker.id, marker.type, marker.action = ns, 0, marker_type, Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.color.r, marker.color.g, marker.color.b, marker.color.a = rgba
+        return marker
+
+    def _book_box(self, ns, position, quat, rgba):
+        marker = self._marker(ns, Marker.CUBE, rgba)
+        p, o = marker.pose.position, marker.pose.orientation
+        p.x, p.y, p.z = (float(v) for v in position)
+        o.x, o.y, o.z, o.w = (float(v) for v in quat)
+        marker.scale.x, marker.scale.y, marker.scale.z = (float(v) for v in self.get_parameter("book_size_m").value)
+        return marker
+
+    def _range_markers(self):
+        """Trained book start centres (points at the table top under them) and bounds, plus the insert goal."""
+        markers = [self._book_box("goal", self.manifest.target_book_position_base, (0.0, 0.0, 0.0, 1.0),
+                                  (0.1, 0.9, 0.2, 0.35))]
+        rows = self.manifest.start_book_position_base
+        if rows is not None:
+            z = float(rows[:, 2].min()) - 0.5 * float(self.get_parameter("book_size_m").value[2]) + 0.002
+            centers = self._marker("start_centers", Marker.POINTS, (0.2, 0.6, 1.0, 0.9))
+            centers.scale.x = centers.scale.y = 0.006
+            centers.points = [Point(x=float(x), y=float(y), z=z) for x, y in rows[:, :2]]
+            low, high = rows[:, :2].min(axis=0), rows[:, :2].max(axis=0)
+            bounds = self._marker("start_bounds", Marker.LINE_STRIP, (0.2, 0.6, 1.0, 1.0))
+            bounds.scale.x = 0.003
+            bounds.points = [Point(x=float(x), y=float(y), z=z) for x, y in
+                             ((low[0], low[1]), (high[0], low[1]), (high[0], high[1]), (low[0], high[1]),
+                              (low[0], low[1]))]
+            markers += [centers, bounds]
+        return MarkerArray(markers=markers)
+
+    def _publish_markers(self):
+        if self.book_position is not None:
+            self.book_marker_publisher.publish(
+                self._book_box("policy_book", self.book_position, self.book_quaternion, (1.0, 0.55, 0.0, 0.6)))
+        if self.state != "IDLE" or self.manifest.start_book_position_base is None or not np.all(np.isfinite(self.q)):
+            return
+        row, joint_error = nearest_start_row(self.q, self.manifest)
+        within = joint_error <= float(self.get_parameter("start_joint_tolerance_rad").value)
+        self.start_row_marker_publisher.publish(self._book_box(
+            "start_row", self.manifest.start_book_position_base[row], (0.0, 0.0, 0.0, 1.0),
+            (1.0, 0.9, 0.1, 0.35) if within else (0.9, 0.1, 0.1, 0.35)))
+
     def _tick(self):
+        self._publish_markers()
         if self.state != "RUNNING":
             return
         ready, reason = self._inputs_ready()

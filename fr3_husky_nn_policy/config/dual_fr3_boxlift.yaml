@@ -30,6 +30,10 @@ ppo_boxlift_policy_node:
     # goal.xy_offset_range_base = trained offset range (checkpoints without it: vertical lift, 0 only);
     # goal.xy_range_base = trained absolute goal x/y range, box start + offset must lie inside it.
     goal_xy_offset_m: [0.0, 0.0]
+    # What goal_xy_offset_m is added to: box_start (box x/y latched at start_policy, as in training) or
+    # range_center (center of the trained absolute goal range goal.xy_range_base; GoalXY checkpoints only).
+    # 4700/5499: center (0.45, 0.0), so range_center + [0, 0] is (0.45, 0.0) and offsets go x +-0.05, y +-0.10.
+    goal_xy_reference: box_start
 
     joint_state_timeout_s: 0.15
     # Longer than one vision frame; a stale box pose while RUNNING is a fault (stop -> box drops).
@@ -85,3 +89,6 @@ ppo_boxlift_policy_node:
     # Empty = <repo>/data. One directory per session: metadata.json + trace.csv.
     log_root: ""
     log_task_name: dual_fr3_boxlift
+    # one summary row per session (final box vs goal: x/y/z error, norms, roll/pitch/yaw) appended to
+    # <result_root>/<log_task_name>/results.csv; "" = <repo>/experi_result
+    result_root: ""
