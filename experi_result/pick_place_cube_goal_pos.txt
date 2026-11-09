@@ -1,0 +1,40 @@
+# 큐브 pick-place: 왼쪽 아무 데나 -> 오른쪽 목표 10곳 (2026-11-09)
+# base 기준 +y = 로봇 왼쪽, -y = 로봇 오른쪽. 목표 = goal_xy_m (중심, launch 기본값 [0.50, -0.20]) + goal_offset_xy_m.
+# 큐브: 왼쪽 영역 아무 데나 세움. x 0.45~0.55 (RViz 연두), y -0.10 ~ +0.05 (학습 y 상한 +0.05).
+#   목표와 10 cm 이상이어야 한다(4~6번 y -0.20 목표는 큐브 y가 -0.10보다 왼쪽이어야 함).
+# 10곳 모두 노드 검사(학습 범위, 오른팔 link0에서 0.62 m 안) 통과 확인. 10번 y -0.45는 학습 범위 끝.
+# 순서: 큐브 세움 -> RViz 주황이 실제 큐브와 겹침 -> 아래 offset (IDLE) -> 목표 초록 확인 -> start_policy
+# 중심 자체를 바꾸려면: ros2 param set /ppo_pickplace_cube_policy_node goal_xy_m "[0.50, -0.20]"
+
+# 1. 목표 (0.50, -0.30)   y -0.30 줄
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.00, -0.10]"
+
+# 2. 목표 (0.55, -0.30)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.05, -0.10]"
+
+# 3. 목표 (0.50, -0.20)   y -0.20 줄 (중심)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.00, 0.00]"
+
+# 4. 목표 (0.55, -0.20)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.05, 0.00]"
+
+# 5. 목표 (0.50, -0.40) (실패)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.00, -0.20]"
+
+# 6. 목표 (0.55, -0.40)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.05, -0.20]"
+
+# 7. 목표 (0.45, -0.40)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[-0.05, -0.20]"
+
+# 8. 목표 (0.50, -0.45)   학습 y 끝 -0.45
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.00, -0.25]"
+
+# 9. 목표 (0.45, -0.45)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[-0.05, -0.25]"
+
+# 10. 목표 (0.55, -0.45)
+ros2 param set /ppo_pickplace_cube_policy_node goal_offset_xy_m "[0.05, -0.25]"
+
+# 시작 (각 시도마다, IDLE)
+ros2 service call /ppo_pickplace_cube_policy_node/start_policy std_srvs/srv/Trigger {}

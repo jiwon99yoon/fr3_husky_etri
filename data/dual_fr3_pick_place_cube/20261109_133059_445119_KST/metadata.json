@@ -1,0 +1,161 @@
+{
+  "started_at": "2026-11-09T13:30:59.445119+09:00",
+  "model_path": "/home/husky-rcu/jw_ws/install/fr3_husky_nn_policy/share/fr3_husky_nn_policy/models/dual_fr3_pick_place_cube_gripper_busy_model4000.npz",
+  "model_source_sha256": "d9ab7c7706fea29130bb2a05dcd0f8ddd3518b572a0567f064b0903d44ea265c",
+  "mode": "command",
+  "target_position_base": [
+    0.51,
+    -0.33,
+    0.39499999999999996
+  ],
+  "cube_start_position_base": [
+    0.47120640383086165,
+    -0.036469317326103035,
+    0.3909000106531436
+  ],
+  "cube_start_quat_base": [
+    -0.002651026005342977,
+    0.0353970872687617,
+    0.16992055285129942,
+    -0.9848182695262694
+  ],
+  "joint_start_position": [
+    -0.5223996639251709,
+    -0.7830286026000977,
+    0.0019527700496837497,
+    -2.355208158493042,
+    0.00566017534583807,
+    1.5654023885726929,
+    0.7972816824913025,
+    0.5222494006156921,
+    -0.7859228849411011,
+    0.0014910947065800428,
+    -2.355569362640381,
+    0.006034501362591982,
+    1.5744510889053345,
+    0.7981141805648804,
+    0.03804004192352295,
+    0.03804004192352295
+  ],
+  "joint_names": [
+    "left_fr3_joint1",
+    "left_fr3_joint2",
+    "left_fr3_joint3",
+    "left_fr3_joint4",
+    "left_fr3_joint5",
+    "left_fr3_joint6",
+    "left_fr3_joint7",
+    "right_fr3_joint1",
+    "right_fr3_joint2",
+    "right_fr3_joint3",
+    "right_fr3_joint4",
+    "right_fr3_joint5",
+    "right_fr3_joint6",
+    "right_fr3_joint7",
+    "right_fr3_finger_joint1",
+    "right_fr3_finger_joint2"
+  ],
+  "right_link0_mount_base": {
+    "position": [
+      0.0,
+      -0.215,
+      0.0
+    ],
+    "quat": [
+      0.0,
+      0.0,
+      -0.25881904529652755,
+      0.9659258262370843
+    ]
+  },
+  "tcp_start_position_base": [
+    0.3080135835580859,
+    -0.21329169155685096,
+    0.41366609904571583
+  ],
+  "parameters": {
+    "joint_states_topic": "/dual_fr3/joint_states",
+    "gripper_joint_states_topic": "/right_franka_gripper/joint_states",
+    "object_pose_topic": "/cube_tf",
+    "object_position_offset_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "base_frame": "base",
+    "right_link0_frame": "right_fr3_link0",
+    "tcp_offset_position_m": [
+      0.0,
+      0.0,
+      0.2844
+    ],
+    "gripper_action_ns": "/right_franka_gripper",
+    "policy_rate_hz": 20.0,
+    "episode_length_s": 14.0,
+    "stop_on_success_s": 0.5,
+    "joint_state_timeout_s": 0.15,
+    "gripper_joint_state_timeout_s": 0.5,
+    "object_pose_timeout_s": 0.2,
+    "command_timeout_s": 0.15,
+    "max_policy_target_delta_rad": 0.2,
+    "ready_tolerance_rad": 0.2,
+    "max_start_tilt_deg": 20.0,
+    "control_gripper": true,
+    "grasp_width_m": 0.0,
+    "grasp_speed_mps": 0.1,
+    "grasp_force_n": 30.0,
+    "grasp_epsilon_m": 0.08,
+    "open_width_m": 0.08,
+    "open_speed_mps": 0.1,
+    "goal_xy_m": [
+      0.46,
+      -0.23
+    ],
+    "goal_offset_xy_m": [
+      0.05,
+      -0.1
+    ],
+    "object_workspace_min": [
+      0.25,
+      -0.7,
+      0.3
+    ],
+    "object_workspace_max": [
+      0.9,
+      0.3,
+      0.8
+    ],
+    "shadow_mode": false
+  },
+  "final_cube_vs_goal": {
+    "cube_position_base": [
+      0.4902,
+      -0.3172,
+      0.3922
+    ],
+    "goal_position_base": [
+      0.51,
+      -0.33,
+      0.395
+    ],
+    "error_xyz_m": [
+      -0.0198,
+      0.0128,
+      -0.0028
+    ],
+    "error_xy_m": 0.0236,
+    "tilt_deg": 3.27,
+    "cube_yaw_deg": -43.47,
+    "hand_clear_m": 0.0919,
+    "released": false,
+    "cube_pose_fresh": true,
+    "success": true,
+    "success_with_tilt": true,
+    "cube_pose_age_ms": 5.1,
+    "first_success_s": 7.54
+  },
+  "ended_at": "2026-11-09T13:31:10.487756+09:00",
+  "end_reason": "success held 0.50 s",
+  "trace_rows": 220,
+  "gripper_events": 15
+}

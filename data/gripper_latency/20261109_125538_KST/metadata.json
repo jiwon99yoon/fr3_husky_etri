@@ -1,0 +1,24 @@
+{
+  "started_at": "2026-11-09T12:55:38.790627+09:00",
+  "args": {
+    "side": "right",
+    "cycles": 10,
+    "speeds": [
+      0.1
+    ],
+    "grasp_width": 0.0,
+    "epsilon": 0.08,
+    "force": 30.0,
+    "open_width": 0.08,
+    "move_close": false,
+    "move_close_width": 0.01,
+    "idle_open": false,
+    "settle": 1.0,
+    "timeout": 6.0,
+    "motion_threshold": 0.001,
+    "out": "/home/husky-rcu/jw_ws/src/fr3_husky/data/gripper_latency",
+    "yes": false,
+    "analyze": null
+  },
+  "gripper_ns": "/right_franka_gripper"
+}
