@@ -1,0 +1,31 @@
+# 1. 중심 (0.66, -0.39)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7736 -0.3693 -0.5387 -2.2783 0.1114 2.7089 0.3702
+# 2. x +1 cm (0.67, -0.39)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7195 -0.3239 -0.4836 -2.2485 0.1890 2.7066 0.3200
+# 3. x -1 cm (0.65, -0.39)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.8218 -0.4172 -0.5885 -2.3063 0.0264 2.7079 0.4259
+# 4. x +4 cm (0.70, -0.39)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.6467 -0.2151 -0.4046 -2.1566 0.3085 2.6969 0.2510
+
+# 5. x -4 cm (0.62, -0.39)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7699 -0.5130 -0.5570 -2.3835 -0.0321 2.6919 0.4536
+
+# 6. y +4 cm (0.66, -0.35)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7898 -0.4004 -0.4883 -2.3211 0.0028 2.7312 0.5200
+
+# 7. y -4 cm (0.66, -0.43)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.6686 -0.3083 -0.5076 -2.2196 0.2899 2.6677 0.1768
+
+# 8. y +8 cm (0.66, -0.31)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.7498 -0.4106 -0.3835 -2.3520 -0.0423 2.7454 0.6282
+
+# 9. x +6, y -5 cm (0.72, -0.44)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.5954 -0.0941 -0.4372 -2.0182 0.4731 2.6298 0.0748
+
+# 10. x +8, y -6 cm (0.74, -0.45)  ※ x가 학습 범위 밖 (+1 cm)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.5897 -0.0181 -0.4472 -1.9345 0.5259 2.6033 0.0415
+
+
+# 11. x +8, y +6 cm (0.74, -0.33)  ※ x가 학습 범위 밖 (+1 cm)
+ros2 run fr3_husky_task_manager move_to_joint --arm right --right-target-positions 0.6795 -0.1340 -0.3302 -2.0934 0.2277 2.7319 0.4235
+
