@@ -369,6 +369,44 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
+      Name: Pick-place goal
+      Namespaces:
+        goal: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ppo_pickplace_cube_policy_node/goal_marker
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Pick-place policy cube
+      Namespaces:
+        policy_cube: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ppo_pickplace_cube_policy_node/cube_marker
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Pick-place test region
+      Namespaces:
+        reachable_region: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ppo_pickplace_cube_policy_node/range_markers
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
       Name: Cube-lift goal
       Namespaces:
         goal: true

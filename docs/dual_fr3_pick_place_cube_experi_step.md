@@ -88,6 +88,23 @@ python scripts/tools/draw_pick_place_area.py --out ~/etri_ws/src/fr3_husky_etri/
 | 오른팔 장착 | (0, −0.215, 0), yaw −30° | 첫 shadow 세션 `metadata.json`의 `right_link0_mount_base` | TF/URDF 확인. 노드는 FK와 TF의 link7만 비교하고, 장착 위치 자체는 sim과 비교하지 않는다 |
 | ready 자세 | 학습 ±0.05 rad | `move_to_joint` 뒤 그대로 | 노드는 0.2 rad까지 받지만 ±0.05 안으로 맞춘다 |
 
+### 그리퍼 실측 (2026-11-09, 오른손 UMI 팁, 실제 큐브를 손으로 받침, 30 N · 0.1 m/s, 10회)
+
+`data/gripper_latency/20261109_125538_KST` (`gripper_latency_probe --force 30 --epsilon 0.08 --grasp-width 0.0 --open-width 0.08`).
+
+| | 실측 | sim |
+|---|---|---|
+| 큐브를 쥔 `finger_joint1` | **0.0235** (폭 46.9~47.7 mm) | 0.0234 — 맞음 |
+| 다 연 `finger_joint1` | **0.0375~0.0378** (폭 75.0~75.5 mm) | 0.04 — 관측 7이 2.3 mm 작음 |
+| grasp: send → 손가락 움직임 | 0.5~0.7 s | 0.45~0.9 s |
+| grasp: send → 큐브에 닿음 | 0.75~0.95 s | |
+| **grasp: send → result (obs 36 = 1)** | **2.05 s (1.93~2.30)**. 닿은 뒤 1.1~1.2 s 더 기다림 | 약 1.0~1.6 s (끝 확인 0.3~0.4 s) |
+| open(큐브에서): send → 움직임 / result | 0.6 s / 1.22 s (1.20~1.31) | 지연 + 이동 + 0.3~0.4 s |
+| 폭 값 갱신 | 0.20 s (토픽 11.4 Hz) | 0.25~0.38 s |
+
+- grasp가 물체를 쥐면 result까지 닿은 뒤 약 1.1 s를 더 쓴다(빈 손 grasp의 settle은 0.3~0.4 s였다). 실물에서 obs 36이 sim보다 0.5~1 s 길게 1로 남는다.
+- 표의 `speed`·`onset` 열은 이동 거리가 28 mm로 짧아(폭 갱신 1~2번) 믿기 어렵다. 위 시각은 `widths.csv`의 폭 변화 시점에서 읽었다.
+
 ## 시험 쌍
 
 model_4000의 sim 결과(쌍마다 32 env, 결정적, DR 켬)다. 처음에는 **A**부터 한다.

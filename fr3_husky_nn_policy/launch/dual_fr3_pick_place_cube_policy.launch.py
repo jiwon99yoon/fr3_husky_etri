@@ -3,7 +3,7 @@
 The policy node drives the right arm through /fr3_policy_control (robot_name dual, left arm held) and sends the
 right Franka gripper Grasp/Move goals itself. Start with shadow_mode:=true, then shadow_mode:=false and call
 /ppo_pickplace_cube_policy_node/start_policy. The goal is goal_xy_m (base); change it with
-`ros2 param set /ppo_pickplace_cube_policy_node goal_xy_m "[x, y]"` while IDLE.
+`ros2 param set /ppo_pickplace_cube_policy_node goal_xy_m "[x, y]"` (centre) or goal_offset_xy_m "[dx, dy]" while IDLE.
 """
 
 from launch import LaunchDescription
@@ -51,6 +51,7 @@ def generate_launch_description():
                 "object_position_offset_m": ParameterValue(LaunchConfiguration("object_position_offset_m"),
                                                            value_type=list[float]),
                 "goal_xy_m": ParameterValue(LaunchConfiguration("goal_xy_m"), value_type=list[float]),
+                "goal_offset_xy_m": ParameterValue(LaunchConfiguration("goal_offset_xy_m"), value_type=list[float]),
                 "shadow_mode": LaunchConfiguration("shadow_mode"),
             },
         ],
@@ -69,8 +70,10 @@ def generate_launch_description():
                                   description="PoseStamped of the cube centre, any frame with a TF to base"),
             DeclareLaunchArgument("object_position_offset_m", default_value="[0.0, 0.0, 0.0]",
                                   description="added to the cube position in base before the policy sees it"),
-            DeclareLaunchArgument("goal_xy_m", default_value="[0.55, -0.20]",
-                                  description="goal cube centre x/y in base (trained x 0.45-0.65, y -0.45-0.05, "
+            DeclareLaunchArgument("goal_offset_xy_m", default_value="[0.0, 0.0]",
+                                  description="added to goal_xy_m (offset around a fixed goal centre)"),
+            DeclareLaunchArgument("goal_xy_m", default_value="[0.50, -0.20]",
+                                  description="goal centre x/y in base (trained x 0.45-0.65, y -0.45-0.05, "
                                               "within 0.62 m of (0, -0.215), >= 0.10 m from the cube)"),
             DeclareLaunchArgument(
                 "model_path",

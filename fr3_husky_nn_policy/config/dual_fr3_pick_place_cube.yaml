@@ -47,12 +47,17 @@ ppo_pickplace_cube_policy_node:
     # Safe default: inference and logging run, but no command is published.
     shadow_mode: true
 
-    # Goal cube centre x/y (base), z is the standing cube height 0.395. Trained: x 0.45-0.65, y -0.45-0.05, within
-    # 0.62 m of the right link0 axis (0, -0.215), >= 0.10 m from the cube. Change with `ros2 param set` while IDLE.
-    goal_xy_m: [0.55, -0.20]
+    # Goal cube centre x/y (base) = goal_xy_m (fixed centre) + goal_offset_xy_m; z is the standing cube height
+    # 0.395. Trained: x 0.45-0.65, y -0.45-0.05, within 0.62 m of the right link0 axis (0, -0.215), >= 0.10 m from
+    # the cube. Change either with `ros2 param set` while IDLE (e.g. goal_offset_xy_m "[0.05, 0.0]").
+    goal_xy_m: [0.50, -0.20]
+    goal_offset_xy_m: [0.0, 0.0]
     # Cube poses outside this box are dropped as vision outliers (the last pose is kept).
     object_workspace_min: [0.25, -0.70, 0.30]
     object_workspace_max: [0.90, 0.30, 0.80]
+    # RViz only (no effect on the checks): green test region = this box within 0.62 m of the right link0 axis
+    region_marker_x_m: [0.45, 0.55]
+    region_marker_y_m: [-0.45, 0.05]
 
     log_root: ""                    # empty: <repo>/data
     log_task_name: dual_fr3_pick_place_cube

@@ -9,8 +9,8 @@ with the same 37-D actor (``pickplace_cube_core``). Contract (as the cube-lift S
 - gripper action: close when a[7] < 0. The node sends ``franka_msgs`` Grasp/Move goals itself, one at a time and
   never preempted (``GripperCommandQueue``, the sim's delayed gripper); obs 36 is 1 from a send until its result
 
-Goal: absolute cube-centre x/y in base (``goal_xy_m``, launch argument; ``ros2 param set`` while IDLE), z is the
-standing cube height. start_policy refuses a goal outside the trained region or closer than 10 cm to the cube.
+Goal: cube-centre x/y in base = ``goal_xy_m`` (centre, launch argument) + ``goal_offset_xy_m`` (``ros2 param set``
+while IDLE, e.g. +-0.05 m around a fixed centre), z is the standing cube height. start_policy refuses a goal outside the trained region or closer than 10 cm to the cube.
 
 Cube pose: ``geometry_msgs/PoseStamped`` of the CUBE CENTRE (``/cube_tf`` as in the cube-lift runs), any frame with
 a TF to ``base``. A lost marker (the hand covers it while holding) does not stop the session: the last pose is kept,
@@ -63,10 +63,10 @@ from .pickplace_cube_core import (
     ACTION_DIM,
     ACTION_SCALE,
     CUBE_REST_Z,
-    CUBE_X,
-    CUBE_Y,
     OBS_DIM,
+    REACH_RADIUS,
     READY_RIGHT_ARM,
+    RIGHT_LINK0_XY,
     TABLE_TOP_Z,
     TARGET_LOWER,
     TARGET_UPPER,
@@ -140,9 +140,13 @@ class PPOPickPlaceCubePolicyNode(Node):
         self.declare_parameter("shadow_mode", True)
         # goal cube centre x/y (base). Trained: x 0.45-0.65, y -0.45-0.05, within 0.62 m of (0, -0.215), >= 0.10 m
         # from the cube
-        self.declare_parameter("goal_xy_m", [0.55, -0.20])
+        self.declare_parameter("goal_xy_m", [0.50, -0.20])
+        self.declare_parameter("goal_offset_xy_m", [0.0, 0.0])
         self.declare_parameter("object_workspace_min", [0.25, -0.70, 0.30])
         self.declare_parameter("object_workspace_max", [0.90, 0.30, 0.80])
+        # RViz only: test region (green fill) = this x/y box within the right-arm reach; blue = trained rectangle
+        self.declare_parameter("region_marker_x_m", [0.45, 0.55])
+        self.declare_parameter("region_marker_y_m", [-0.45, 0.05])
         self.declare_parameter("log_root", "")
         self.declare_parameter("log_task_name", "dual_fr3_pick_place_cube")
         self.declare_parameter("result_root", "")  # "" = <repo>/experi_result
@@ -155,7 +159,7 @@ class PPOPickPlaceCubePolicyNode(Node):
                              f"got {self.actor.input_dim}->{self.actor.output_dim}")
         if self.actor.output_activation != "tanh":
             raise ValueError("the cube pick-place actor is tanh-squashed; export with --output-activation tanh")
-        error = goal_error(self.get_parameter("goal_xy_m").value)
+        error = goal_error(self._goal_xy())
         if error is not None:
             raise ValueError(error)
 
@@ -211,7 +215,7 @@ class PPOPickPlaceCubePolicyNode(Node):
         self.goal_marker_publisher = self.create_publisher(Marker, "~/goal_marker", latched)
         self.cube_marker_publisher = self.create_publisher(Marker, "~/cube_marker", 1)
         self.range_marker_publisher = self.create_publisher(MarkerArray, "~/range_markers", latched)
-        self.range_marker_publisher.publish(self._range_markers())
+        self.range_marker_box = None
         self.add_on_set_parameters_callback(self._on_set_parameters)
 
         rate = float(self.get_parameter("policy_rate_hz").value)
@@ -222,23 +226,29 @@ class PPOPickPlaceCubePolicyNode(Node):
             f"Loaded {self.actor.model_path} ({OBS_DIM}->{ACTION_DIM} tanh, source {self.actor.source_sha256[:12]}...), "
             f"mode={'SHADOW' if self.shadow_mode else 'COMMAND'}, rate={rate:.1f} Hz, "
             f"{float(self.get_parameter('episode_length_s').value):.1f} s horizon, gripper goals on {ns}, "
-            f"goal xy {np.asarray(self.get_parameter('goal_xy_m').value).tolist()}"
+            f"goal xy {self._goal_xy().round(4).tolist()} (goal_xy_m + goal_offset_xy_m)"
         )
 
     # ------------------------------------------------------------------ goal
-    def _goal_xy(self) -> np.ndarray:
-        return np.asarray(self.get_parameter("goal_xy_m").value, dtype=np.float64)
+    def _goal_xy(self, changed=None) -> np.ndarray:
+        """goal_xy_m + goal_offset_xy_m; ``changed`` overrides either while a param set is being validated."""
+        changed = changed or {}
+        value = lambda name: np.asarray(changed.get(name, self.get_parameter(name).value), dtype=np.float64)
+        return value("goal_xy_m") + value("goal_offset_xy_m")
 
     def _on_set_parameters(self, parameters) -> SetParametersResult:
-        changed = {p.name: p.value for p in parameters if p.name == "goal_xy_m"}
+        changed = {p.name: p.value for p in parameters if p.name in ("goal_xy_m", "goal_offset_xy_m")}
         if not changed:
             return SetParametersResult(successful=True)
         if self.state != "IDLE":
-            return SetParametersResult(successful=False, reason=f"goal_xy_m can only change while IDLE ({self.state})")
-        error = goal_error(changed["goal_xy_m"])
+            return SetParametersResult(successful=False, reason=f"{', '.join(changed)} can only change while IDLE ({self.state})")
+        if any(len(v) != 2 for v in changed.values()):
+            return SetParametersResult(successful=False, reason="goal_xy_m / goal_offset_xy_m need 2 values")
+        goal = self._goal_xy(changed)
+        error = goal_error(goal)
         if error is not None:
             return SetParametersResult(successful=False, reason=error)
-        self.get_logger().info(f"goal_xy_m accepted: {np.asarray(changed['goal_xy_m']).tolist()}")
+        self.get_logger().info(f"goal accepted: {goal.round(4).tolist()} ({', '.join(changed)} changed)")
         return SetParametersResult(successful=True)
 
     # ------------------------------------------------------------------ inputs
@@ -554,7 +564,7 @@ class PPOPickPlaceCubePolicyNode(Node):
             "episode_length_s", "stop_on_success_s", "joint_state_timeout_s", "gripper_joint_state_timeout_s", "object_pose_timeout_s",
             "command_timeout_s", "max_policy_target_delta_rad", "ready_tolerance_rad", "max_start_tilt_deg",
             "control_gripper", "grasp_width_m", "grasp_speed_mps", "grasp_force_n", "grasp_epsilon_m", "open_width_m",
-            "open_speed_mps", "goal_xy_m", "object_workspace_min", "object_workspace_max", "shadow_mode",
+            "open_speed_mps", "goal_xy_m", "goal_offset_xy_m", "object_workspace_min", "object_workspace_max", "shadow_mode",
         )
         try:
             self.logger_ = LiftCubeRunLogger(
@@ -646,18 +656,28 @@ class PPOPickPlaceCubePolicyNode(Node):
         return marker
 
     def _range_markers(self) -> MarkerArray:
-        """Trained cube start / goal x-y rectangle on the table (blue); the 0.62 m reach limit also applies."""
-        marker = Marker()
-        marker.header.frame_id = self.base_frame
-        marker.ns, marker.id, marker.type, marker.action = "trained_region", 0, Marker.LINE_STRIP, Marker.ADD
-        marker.pose.orientation.w = 1.0
-        marker.scale.x = 0.003
-        marker.color.r, marker.color.g, marker.color.b, marker.color.a = (0.2, 0.6, 1.0, 1.0)
-        (x0, x1), (y0, y1), z = CUBE_X, CUBE_Y, TABLE_TOP_Z + 0.002
-        marker.points = [Point(x=x, y=y, z=z) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0))]
-        return MarkerArray(markers=[marker])
+        """Test region on the table (green fill): region_marker_x/y box within the right-arm reach radius."""
+        cx, cy = RIGHT_LINK0_XY
+        (x0, x1), (y0, y1) = self.range_marker_box
+        z = TABLE_TOP_Z + 0.002
+        xs, ys = np.meshgrid(np.linspace(x0, x1, 41), np.linspace(y0, y1, 101), indexing="ij")
+        inside = np.hypot(xs - cx, ys - cy) <= REACH_RADIUS
+        clear = Marker()
+        clear.action = Marker.DELETEALL  # drops the old trained-rectangle line from a latched earlier run
+        region = Marker()
+        region.header.frame_id = self.base_frame
+        region.ns, region.id, region.type, region.action = "reachable_region", 0, Marker.CUBE_LIST, Marker.ADD
+        region.pose.orientation.w = 1.0
+        region.scale.x, region.scale.y, region.scale.z = (x1 - x0) / 40, (y1 - y0) / 100, 0.001
+        region.color.r, region.color.g, region.color.b, region.color.a = (0.2, 0.9, 0.3, 0.25)
+        region.points = [Point(x=float(x), y=float(y), z=z) for x, y in zip(xs[inside], ys[inside])]
+        return MarkerArray(markers=[clear, region])
 
     def _publish_markers(self) -> None:
+        box = (tuple(self.get_parameter("region_marker_x_m").value), tuple(self.get_parameter("region_marker_y_m").value))
+        if box != self.range_marker_box:  # first tick and after `ros2 param set ... region_marker_*`
+            self.range_marker_box = box
+            self.range_marker_publisher.publish(self._range_markers())
         if self.object_update_ns == 0:
             return
         self.cube_marker_publisher.publish(

@@ -114,7 +114,8 @@ def _stats(values):
 def analyze_run(run_dir: Path, motion_threshold_m=0.001, quiet=False):
     t, w, recv, events = _load(run_dir)
     per = [m for m in (analyze_command(t, w, e, motion_threshold_m) for e in events) if m]
-    keys = ("accept_s", "onset_s", "motion_s", "t90_s", "speed_mps_measured", "result_s", "settle_s")
+    keys = ("accept_s", "onset_s", "motion_s", "t90_s", "speed_mps_measured", "result_s", "settle_s",
+            "width_end_m")
     groups = {}
     for m in per:
         if m["travel_m"] == 0.0 and m["command"] == "open" and m["width_start_m"] > 0.075:
@@ -149,17 +150,18 @@ def analyze_run(run_dir: Path, motion_threshold_m=0.001, quiet=False):
               f"{1e3 * topic['width_update_interval_median_s']:.0f} ms (p95 "
               f"{1e3 * topic['width_update_interval_p95_s']:.0f}) while moving")
         print(f"{'command':20s} {'speed':>6s} {'n':>3s}  {'accept ms':>11s} {'onset ms':>15s} {'motion ms':>15s} {'90% ms':>15s} "
-              f"{'speed m/s':>15s} {'result ms':>15s} {'settle ms':>11s}")
+              f"{'speed m/s':>15s} {'result ms':>15s} {'settle ms':>11s} {'end width mm':>16s}")
         fmt = lambda s, scale=1e3: (f"{scale * s['median']:6.0f} [{scale * s['min']:.0f}-{scale * s['max']:.0f}]"
                                     if s.get("n") else "-")
         fmt_v = lambda s: f"{s['median']:.3f} [{s['min']:.3f}-{s['max']:.3f}]" if s.get("n") else "-"
         for row in summary:
             print(f"{row['command']:20s} {row['speed_mps']:6.3f} {row['motion_s'].get('n', 0) or row['result_s'].get('n', 0):3d}"
                   f"  {fmt(row['accept_s']):>11s} {fmt(row['onset_s']):>15s} {fmt(row['motion_s']):>15s} {fmt(row['t90_s']):>15s} "
-                  f"{fmt_v(row['speed_mps_measured']):>15s} {fmt(row['result_s']):>15s} {fmt(row['settle_s']):>11s}")
+                  f"{fmt_v(row['speed_mps_measured']):>15s} {fmt(row['result_s']):>15s} {fmt(row['settle_s']):>11s} "
+                  f"{fmt(row['width_end_m']):>16s}")
         print("median [min-max]. motion = send -> first width sample moved > "
               f"{1e3 * motion_threshold_m:.0f} mm (upper bound); onset = motion extrapolated back with the speed; "
-              "speed is total finger width per second")
+              "speed and end width are total finger width (finger_joint1 = width / 2)")
     return summary
 
 
