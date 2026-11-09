@@ -1,0 +1,47 @@
+name: dual_fr3_pick_place_cube_gripper_busy
+training_task: Isaac-PickPlace-Cube-DualFR3-UMI-GripperBusy-v0
+training_run: dual_fr3_lab logs/rsl_rl/dual_fr3_pick_place_cube_gripper_busy/2026-11-09_02-17-33_release_goalfix_5070
+resumed_from: 2026-11-09_01-27-06_fix_5070/model_1450.pt
+source_checkpoint: model_4000.pt
+source_iteration: 4000
+source_sha256: d9ab7c7706fea29130bb2a05dcd0f8ddd3518b572a0567f064b0903d44ea265c
+runtime: numpy
+activation: elu
+output_activation: tanh   # TanhSquashedGaussian actor; deterministic action = tanh(mean)
+network_dims: [37, 512, 256, 128, 8]
+policy_rate_hz: 20.0       # physics/PD 100 Hz, decimation 5
+episode_length_s: 14.0
+controlled_robot: right    # left arm held at its ready pose
+fingertips: UMI (TCP = fingertip centre 0.2844 m past link7)
+action:
+  arm: q_target = clamp(q(t_k) + clip(0.1 * a[0:7], -0.1, 0.1) rad, FR3 limits), held until the next tick (isaac PD)
+  gripper: close when a[7] < 0, no hysteresis; one goal at a time, a changed request is sent after the result
+quaternion_order: xyzw
+observation:
+  - {name: right_joint_position_minus_ready, size: 7}
+  - {name: right_finger_joint1_position, size: 1}   # absolute; sim updates it every 0.25-0.38 s like the real topic
+  - {name: right_joint_velocity, size: 7}
+  - {name: cube_centre_in_base, size: 3}            # vision; sim: 0-150 ms delay, dropouts hold the last value
+  - {name: cube_quaternion_xyzw_folded, size: 4}    # z-axis 90 deg symmetries folded (yaw within +-45 deg), w >= 0
+  - {name: cube_minus_tcp_in_base, size: 3}         # vision cube - FK TCP
+  - {name: goal_cube_centre_in_base, size: 3}       # z = 0.395 (standing cube on the nominal table)
+  - {name: previous_action, size: 8}
+  - {name: gripper_busy, size: 1}                   # 1 from sending a gripper goal until its result
+ready_pose_right: [0.5236, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854]
+right_link0_in_base: {position: [0.0, -0.215, 0.0], yaw_deg: -30.0}
+training_ranges_base:
+  table_top_z: 0.345        # +-0.01 DR; table x 0.40-1.00, y -0.50-0.50 (600 x 1000 mm)
+  cube_centre_x: [0.45, 0.65]   # start and goal; also within 0.62 m of the right link0 axis (0, -0.215)
+  cube_centre_y: [-0.45, 0.05]
+  goal_min_distance_m: 0.10
+  cube_yaw_deg: [-45, 45]
+  cube_size_m: [0.05, 0.05, 0.10]
+  cube_mass_kg: [0.07, 0.10]
+  cube_friction_static: [0.4, 1.2]
+  cube_pose_bias: {position_m: 0.005, yaw_deg: 3.0}   # fixed per episode
+  gripper: {delay_s: [0.45, 0.9], settle_s: [0.3, 0.4], force_n: [25, 35], speed_mps: 0.1}
+sim_evaluation:   # deterministic, DR on, terminations on
+  all_ranges: 234/256 (91 %), first success median 2.9 s
+  test_pairs_A_to_G: 27-32 / 32 each (docs/figures/pick_place_cube_layout.png)
+  after_success: asks to close the gripper again ~0.1 s after success with the hand above the cube (228/228); the
+    success stage is kept to 14 s in all of them

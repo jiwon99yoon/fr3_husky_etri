@@ -1,0 +1,47 @@
+name: dual_fr3_pick_place_cube_critic_plus
+training_task: Isaac-PickPlace-Cube-DualFR3-UMI-GripperBusy-CriticPlus-v0   # critic +15D only; actor = GripperBusy
+training_run: dual_fr3_lab shared_checkpoint/dual_fr3_pick_place_cube_gripper_busy_critic_plus/2026-11-09_02-20-56_release_goalfix_critic_plus_4090 (4090)
+resumed_from: 2026-11-09_01-28-57_critic_plus_4090/model_750.pt
+source_checkpoint: model_4749.pt
+source_iteration: 4749
+source_sha256: 9825953cd1569d3aa93c2ddd06eddc94b43011e55754819d95a513319f785903
+runtime: numpy
+activation: elu
+output_activation: tanh   # TanhSquashedGaussian actor; deterministic action = tanh(mean)
+network_dims: [37, 512, 256, 128, 8]
+policy_rate_hz: 20.0       # physics/PD 100 Hz, decimation 5
+episode_length_s: 14.0
+controlled_robot: right    # left arm held at its ready pose
+fingertips: UMI (TCP = fingertip centre 0.2844 m past link7)
+action:
+  arm: q_target = clamp(q(t_k) + clip(0.1 * a[0:7], -0.1, 0.1) rad, FR3 limits), held until the next tick (isaac PD)
+  gripper: close when a[7] < 0, no hysteresis; one goal at a time, a changed request is sent after the result
+quaternion_order: xyzw
+observation:
+  - {name: right_joint_position_minus_ready, size: 7}
+  - {name: right_finger_joint1_position, size: 1}   # absolute; sim updates it every 0.25-0.38 s like the real topic
+  - {name: right_joint_velocity, size: 7}
+  - {name: cube_centre_in_base, size: 3}            # vision; sim: 0-150 ms delay, dropouts hold the last value
+  - {name: cube_quaternion_xyzw_folded, size: 4}    # z-axis 90 deg symmetries folded (yaw within +-45 deg), w >= 0
+  - {name: cube_minus_tcp_in_base, size: 3}         # vision cube - FK TCP
+  - {name: goal_cube_centre_in_base, size: 3}       # z = 0.395 (standing cube on the nominal table)
+  - {name: previous_action, size: 8}
+  - {name: gripper_busy, size: 1}                   # 1 from sending a gripper goal until its result
+ready_pose_right: [0.5236, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854]
+right_link0_in_base: {position: [0.0, -0.215, 0.0], yaw_deg: -30.0}
+training_ranges_base:
+  table_top_z: 0.345        # +-0.01 DR; table x 0.40-1.00, y -0.50-0.50 (600 x 1000 mm)
+  cube_centre_x: [0.45, 0.65]   # start and goal; also within 0.62 m of the right link0 axis (0, -0.215)
+  cube_centre_y: [-0.45, 0.05]
+  goal_min_distance_m: 0.10
+  cube_yaw_deg: [-45, 45]
+  cube_size_m: [0.05, 0.05, 0.10]
+  cube_mass_kg: [0.07, 0.10]
+  cube_friction_static: [0.4, 1.2]
+  cube_pose_bias: {position_m: 0.005, yaw_deg: 3.0}   # fixed per episode
+  gripper: {delay_s: [0.45, 0.9], settle_s: [0.3, 0.4], force_n: [25, 35], speed_mps: 0.1}
+sim_evaluation:   # deterministic, DR on, terminations on
+  all_ranges: 188/256 (73 %), first success median 2.7 s (model_4000 on the same eval 235/256)
+  finger_table_contact: 53/256 envs > 1 N, max 67 N (model_4000 139/256, max 62 N); fingertip at grasp median 3.9 cm
+  after_success: the gripper close request is already back at the first success step in 182/197 envs and in all of
+    them later; the success stage is kept to 14 s in all of them

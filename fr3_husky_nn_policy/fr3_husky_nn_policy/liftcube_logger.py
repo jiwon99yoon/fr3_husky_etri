@@ -1,10 +1,11 @@
-"""Per-run log of the cube-lift Sim2Real policy node (ROS-free).
+"""Per-run log of the cube-lift Sim2Real and cube pick-and-place policy nodes (ROS-free).
 
 One directory per start_policy session::
 
     <log_root>/<task_name>/<YYYYmmdd_HHMMSS_ffffff_TZ>/
         metadata.json        model, node parameters, target, start/end time, end reason, step count
-        trace.csv            one row per policy tick (timing, full 36-D observation, action, joint target, gripper)
+        trace.csv            one row per policy tick (timing, full observation (lift 36-D, pick-place 37-D), action,
+                             joint target, gripper)
         gripper_events.csv   every gripper goal the node sends and the server's answers (accepted, result)
 
 The observation columns are exactly the actor input, so a run can be replayed offline through the
@@ -47,19 +48,25 @@ GRIPPER_FIELDS = (
     "finger_width_m",       # measured right finger_joint1 + finger_joint2
     "gripper_cmd_age_s",    # time since the last gripper goal was sent (NaN before the first one)
 )
-FIELDNAMES = (
-    *TIMING_FIELDS,
-    *GRIPPER_FIELDS,
-    *(f"obs_{i}" for i in range(OBS_DIM)),
-    *(f"action_{i}" for i in range(ACTION_DIM)),
-    *(f"q_target_{i}" for i in range(ARM_DOF)),
-    *(f"object_quat_raw_{axis}" for axis in "xyzw"),  # base-frame cube orientation (not in the observation)
-)
+
+
+def fieldnames(obs_dim: int = OBS_DIM) -> tuple[str, ...]:
+    return (
+        *TIMING_FIELDS,
+        *GRIPPER_FIELDS,
+        *(f"obs_{i}" for i in range(obs_dim)),
+        *(f"action_{i}" for i in range(ACTION_DIM)),
+        *(f"q_target_{i}" for i in range(ARM_DOF)),
+        *(f"object_quat_raw_{axis}" for axis in "xyzw"),  # base-frame cube orientation as received
+    )
+
+
+FIELDNAMES = fieldnames()
 EVENT_FIELDS = ("elapsed_s", "ros_time_ns", "event", "command", "success", "detail", "finger_width_m")
 
 
 class LiftCubeRunLogger:
-    def __init__(self, log_root: Path, task_name: str, metadata: Mapping[str, Any]):
+    def __init__(self, log_root: Path, task_name: str, metadata: Mapping[str, Any], obs_dim: int = OBS_DIM):
         started_at = datetime.now().astimezone()
         safe_task = re.sub(r"[^A-Za-z0-9_.-]+", "_", task_name).strip("._") or "dual_fr3_liftcube"
         stamp = started_at.strftime("%Y%m%d_%H%M%S_%f_%Z")
@@ -76,13 +83,14 @@ class LiftCubeRunLogger:
         self.trace_path = run_dir / "trace.csv"
         self.events_path = run_dir / "gripper_events.csv"
         self.metadata = {"started_at": started_at.isoformat(), **dict(metadata)}
+        self.obs_dim = int(obs_dim)
         self.row_count = 0
         self.event_count = 0
         self.finalized = False
         self._write_metadata()
         self._file = self.trace_path.open("w", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
-        self._writer.writerow(FIELDNAMES)
+        self._writer.writerow(fieldnames(self.obs_dim))
         self._file.flush()
         self._events_file = self.events_path.open("w", newline="", encoding="utf-8")
         self._events = csv.writer(self._events_file)
@@ -97,7 +105,7 @@ class LiftCubeRunLogger:
         if missing:
             raise ValueError(f"missing fields: {missing}")
         arrays = (
-            (np.asarray(observation, dtype=np.float64), OBS_DIM, "observation"),
+            (np.asarray(observation, dtype=np.float64), self.obs_dim, "observation"),
             (np.asarray(action, dtype=np.float64), ACTION_DIM, "action"),
             (np.asarray(q_target, dtype=np.float64), ARM_DOF, "q_target"),
             (np.asarray(object_quat_raw, dtype=np.float64), 4, "object_quat_raw"),

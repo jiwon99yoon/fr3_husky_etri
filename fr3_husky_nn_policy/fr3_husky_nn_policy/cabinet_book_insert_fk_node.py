@@ -25,6 +25,8 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from .fr3_kinematics import fr3_link7_in_link0
+
 
 def _qnormalize(q):
     q = np.asarray(q, dtype=float)
@@ -50,21 +52,6 @@ def _qrotate(q, v):
     vq = np.array([v[0], v[1], v[2], 0.0])
     qi = np.array([-q[0], -q[1], -q[2], q[3]])
     return _qmul(_qmul(q, vq), qi)[:3]
-
-
-# FR3 modified DH (Craig): a, d, alpha per joint (franka FR3 kinematics; link7 frame = DH frame 7)
-_FR3_DH = ((0.0, 0.333, 0.0), (0.0, 0.0, -math.pi / 2), (0.0, 0.316, math.pi / 2), (0.0825, 0.0, math.pi / 2),
-           (-0.0825, 0.384, -math.pi / 2), (0.0, 0.0, math.pi / 2), (0.088, 0.0, math.pi / 2))
-
-
-def fr3_link7_in_link0(q):
-    """4x4 pose of link7 in link0 for the seven FR3 joint angles."""
-    T = np.eye(4)
-    for (a, d, alpha), theta in zip(_FR3_DH, q):
-        ca, sa, ct, st = math.cos(alpha), math.sin(alpha), math.cos(theta), math.sin(theta)
-        T = T @ np.array([[ct, -st, 0.0, a], [st * ca, ct * ca, -sa, -d * sa], [st * sa, ct * sa, ca, d * ca],
-                          [0.0, 0.0, 0.0, 1.0]])
-    return T
 
 
 def _quat_from_matrix(R):

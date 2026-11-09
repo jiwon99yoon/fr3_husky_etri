@@ -9,6 +9,7 @@
 | 작업 | 제어 관절 | 정책 | 외부 작업 입력 |
 | --- | --- | --- | --- |
 | LiftCube | 오른팔과 그리퍼 | 36차원 관측 → 8차원 행동 | 물체 자세와 들어 올릴 목표 |
+| PickPlaceCube | 오른팔과 그리퍼(UMI 팁) | 37차원 관측 → 8차원 행동 | 큐브 자세와 놓을 위치 x, y |
 | Reach | 왼팔과 오른팔 | 58차원 관측 → 14차원 행동 | 사용자가 입력한 목표 중심 |
 
 두 정책은 같은 정책 제어 인터페이스를 통해 20 Hz로 동작합니다. Launch 파일의
@@ -103,6 +104,59 @@ ros2 service call /ppo_liftcube_policy_node/stop_policy std_srvs/srv/Trigger {}
 - 제어기 Isaac PD(dual, 왼팔 고정), 그리퍼는 노드가 /right_franka_gripper/{grasp,move}로 직접 보냄
 - 로그 요약: `ros2 run fr3_husky_nn_policy liftcube_log_summary`
 - 실험 순서: ../docs/dual_fr3_liftcube_sim2real_experi_step.md
+
+## PickPlaceCube (2026-11-09)
+
+오른손(Franka hand + UMI 팁)으로 책상 위에 세워 둔 큐브를 위에서 집어, 놓을 위치에 세워 놓고 손을 떼서
+올립니다. 큐브·비전은 LiftCube Sim2Real과 같고(`/cube_tf`), 책상은 캐비닛 책상(윗면 base z 0.345)입니다.
+
+- 학습: dual_fr3_lab `Isaac-PickPlace-Cube-DualFR3-UMI-GripperBusy{,-Tilt,-CriticPlus}-v0`. 세 변형의 actor가
+  같아서 어느 체크포인트든 같은 노드로 돌립니다.
+- 노드: `ppo_pickplace_cube_policy_node`, launch `dual_fr3_pick_place_cube_policy.launch.py`,
+  config `dual_fr3_pick_place_cube.yaml`, 관측·검사 코드 `pickplace_cube_core.py`
+- 관측 37: 오른팔 q − ready 7, finger_joint1 1, qdot 7, 큐브 중심 3, 큐브 quat 4(z축 90° 대칭 접기), 큐브 − TCP 3(FK),
+  목표 3(z 0.395), 이전 행동 8, 그리퍼 진행 중 1(goal을 보낸 뒤 result까지)
+- 행동 8: 팔 q_target = q + clip(0.1·a, ±0.1 rad)을 학습 관절 한계로 자름. 그리퍼는 a[7] < 0이면 닫기이고,
+  한 번에 하나만 보냅니다. 진행 중에 바뀐 요청은 result 뒤에 마지막 것만 보냅니다(sim의 지연 그리퍼와 같음).
+- 큐브 마커가 손에 가려 끊겨도 세션은 계속하고 마지막 pose를 씁니다. 작업 영역 밖 pose는 버립니다.
+- 세션 끝: 성공이 `stop_on_success_s`(기본 0.5 s, 0이면 끔) 동안 이어지면 노드가 컨트롤러 goal을 멈춥니다.
+  정책은 성공 뒤 멈추도록 학습되지 않아 계속 움직이고, 성공 약 0.1 s 뒤 그리퍼를 공중에서 다시 닫습니다
+  (sim model_4000 228/228, 성공 상태는 14 s까지 유지). 그 밖에는 학습 에피소드 길이 14 s, stop_policy,
+  joint state 끊김, 추론 실패, 그리퍼 goal 거부일 때 멈춥니다(캐비닛 책 노드와 같음). 그리퍼는 그 상태로 둡니다.
+- 결과: `experi_result/dual_fr3_pick_place_cube/results.csv`에 세션마다 한 줄이 남습니다(목표와의 xy 오차, 기울기,
+  손 높이, released, success, first_success_s). success는 sim의 성공 단계와 같이 xy 2.5 cm·손가락 끝이 큐브 윗면
+  3 cm 위·큐브 pose가 새것(0.2 s 안)입니다. 위의 재닫기 때문에 그리퍼 열림(released)은 값만 남깁니다. 기울기도
+  값만 남깁니다. 비전이 선 큐브도 3~4° 기울었다고 읽기 때문입니다. 학습 기준(5°)까지 넣은 값은
+  `success_with_tilt`입니다.
+- 배포 모델: `models/dual_fr3_pick_place_cube_gripper_busy_model4000.npz`(+ 같은 이름 `.yaml`에 출처·학습 범위),
+  release_goalfix_5070 model_4000, sim 결정적 234/256(91 %). 두 번째 후보는 4090 CriticPlus model_4749
+  (`models/dual_fr3_pick_place_cube_critic_plus_model4749.npz`, 같은 평가 188/256, 손가락-책상 접촉 env 수는 절반 이하)이고
+  `model_path:=`로 바꿔 같은 노드로 돌립니다.
+- sim 대조(11-09, model_4000, 32 env × 279 step): 노드 코드로 만든 관측과 sim 관측의 차이는 최대 2e-6
+  (FK TCP 포함)입니다. export한 npz와 torch 정책의 행동 차이는 최대 5e-5입니다.
+
+**TODO(UMI 실측)**: 첫 command 실행 전에 실물과 sim을 비교합니다.
+- UMI 팁으로 큐브를 30 N으로 쥐었을 때 `right_fr3_finger_joint1` 값(sim 0.0234), 다 열었을 때 값(sim 0.04)
+- link7 → 손가락 끝 중앙 TCP(`tcp_offset_position_m`, sim z 0.2844 m)
+
+~~~bash
+# 체크포인트 export (Isaac/RSL-RL 환경, torch 필요)
+python -m fr3_husky_nn_policy.export_ppo_actor <run>/model_N.pt models/dual_fr3_pick_place_cube_<name>.npz --output-activation tanh
+
+# shadow로 확인한 뒤 shadow_mode:=false
+ros2 launch fr3_husky_nn_policy dual_fr3_pick_place_cube_policy.launch.py shadow_mode:=true goal_xy_m:="[0.55, -0.20]"
+ros2 param set /ppo_pickplace_cube_policy_node goal_xy_m "[0.50, -0.30]"   # IDLE일 때만
+ros2 service call /ppo_pickplace_cube_policy_node/start_policy std_srvs/srv/Trigger {}
+ros2 service call /ppo_pickplace_cube_policy_node/stop_policy std_srvs/srv/Trigger {}
+~~~
+
+목표 범위: x 0.45~0.65, y −0.45~0.05, 오른팔 link0 축(0, −0.215)에서 0.62 m 안, 큐브에서 0.10 m 이상.
+범위를 벗어난 목표는 param set 때 거부합니다. 큐브와 너무 가까우면 start_policy를 거부합니다.
+start_policy는 그 밖에도 다음을 확인합니다.
+- 큐브가 같은 범위 안에 서 있는지(±1 cm 허용)
+- 오른팔이 ready 자세인지
+- 그리퍼가 열려 있는지
+- FK link7과 TF link7의 차이가 3 mm 안인지
 
 ## Reach
 

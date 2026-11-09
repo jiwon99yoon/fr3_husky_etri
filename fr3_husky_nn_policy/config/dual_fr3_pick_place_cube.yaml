@@ -1,0 +1,59 @@
+# Isaac Lab 3.0 cube pick-and-place (dual_fr3_lab Isaac-PickPlace-Cube-DualFR3-UMI-GripperBusy{,-Tilt,-CriticPlus}-v0,
+# 37-D actor), right Franka hand with UMI fingertips, 50 x 50 x 100 mm cube (same cube and vision as the cube-lift runs),
+# 75 cm table (cabinet table, top base z 0.345, front edge x 0.40; cabinet removed). Node: ppo_pickplace_cube_policy_node.
+#
+# TODO(UMI 실측) before the first command-mode run, measure and compare with the sim:
+#   - right_fr3_finger_joint1 (/right_franka_gripper/joint_states) grasping the cube at 30 N: sim 0.0234;
+#     fully open: sim 0.04. A different grasp value shifts actor obs 7 -> fix in the node or retrain.
+#   - link7 -> UMI fingertip centre (tcp_offset_position_m): sim z 0.2844 m (the cabinet FK node uses the same value).
+ppo_pickplace_cube_policy_node:
+  ros__parameters:
+    joint_states_topic: /dual_fr3/joint_states                      # arm, ros2_control (1 kHz)
+    gripper_joint_states_topic: /right_franka_gripper/joint_states  # right fingers (~10 Hz, value changes ~0.27 s)
+    object_pose_topic: /cube_tf     # cube centre PoseStamped, any frame with a TF to base (cube-lift vision)
+    object_position_offset_m: [0.0, 0.0, 0.0]   # added in base (vision bias)
+    object_size_m: [0.05, 0.05, 0.10]           # RViz marker only
+    base_frame: base
+    right_link0_frame: right_fr3_link0          # base <- link0 mount from TF, link7 by FK of the joint states
+    right_link7_frame: right_fr3_link7          # FK vs TF check at start_policy
+    tcp_offset_position_m: [0.0, 0.0, 0.2844]   # TODO(UMI 실측): link7 -> fingertip centre, sim value
+    fk_tf_check_tolerance_m: 0.003
+    command_topic: /policy_joint_command
+    control_action: /fr3_policy_control
+    gripper_action_ns: /right_franka_gripper
+
+    policy_rate_hz: 20.0
+    episode_length_s: 14.0               # trained episode; the node stops the controller goal here (as cabinet book)
+    # end the session once success (xy 2.5 cm, fingertips 3 cm above the cube top, fresh cube pose) has held this
+    # long; 0 = run all 14 s. The policy closes the gripper again in the air ~0.1 s after success (sim, 228/228)
+    stop_on_success_s: 0.5
+    joint_state_timeout_s: 0.15          # arm
+    gripper_joint_state_timeout_s: 0.5   # fingers
+    object_pose_timeout_s: 0.20          # start_policy only: a lost marker during the session keeps the last pose
+    command_timeout_s: 0.15
+
+    max_policy_target_delta_rad: 0.20
+    ready_tolerance_rad: 0.20
+    min_open_finger_width_m: 0.07
+    max_start_tilt_deg: 20.0             # vision reads a standing cube 3-4 deg tilted; this catches a lying cube
+    control_gripper: true
+    grasp_width_m: 0.0
+    grasp_speed_mps: 0.1
+    grasp_force_n: 30.0                  # training grasp force
+    grasp_epsilon_m: 0.08
+    open_width_m: 0.08
+    open_speed_mps: 0.1
+
+    # Safe default: inference and logging run, but no command is published.
+    shadow_mode: true
+
+    # Goal cube centre x/y (base), z is the standing cube height 0.395. Trained: x 0.45-0.65, y -0.45-0.05, within
+    # 0.62 m of the right link0 axis (0, -0.215), >= 0.10 m from the cube. Change with `ros2 param set` while IDLE.
+    goal_xy_m: [0.55, -0.20]
+    # Cube poses outside this box are dropped as vision outliers (the last pose is kept).
+    object_workspace_min: [0.25, -0.70, 0.30]
+    object_workspace_max: [0.90, 0.30, 0.80]
+
+    log_root: ""                    # empty: <repo>/data
+    log_task_name: dual_fr3_pick_place_cube
+    result_root: ""                 # empty: <repo>/experi_result (one results.csv row per session)
