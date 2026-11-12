@@ -8,7 +8,7 @@
 
 **상태 (2026-11-07)**
 - dual_fr3_lab에 75 cm task가 있다. rule-based로 121개 행 모두 성공했다.
-- **75 cm 정책: DoorFirst 2998** (`fr3_husky_nn_policy/models/cabinet_book_insert_75cm_door_first_model_2998.npz`, 11-07). sim 121/121, 책이 입구에 닿을 때 문 중앙 97°(최소 92°). 실행 순서는 [dual_fr3_cabinet_book_experi_step.md](dual_fr3_cabinet_book_experi_step.md)의 "75 cm 책상: DoorFirst 2998" 절.
+- **75 cm 정책: DoorFirstCurriculum 2000** (`fr3_husky_nn_policy/models/cabinet_book_insert_75cm_door_first_curriculum_model_2000.npz`). sim 121/121, 책이 입구에 닿을 때 문 중앙 99°, 실로봇 13/13(11-08). DoorFirst 2998(sim 121/121, 문 97°)은 실로봇에서 실패해 비교용이다. 실행 순서는 [dual_fr3_cabinet_book_experi_step.md](dual_fr3_cabinet_book_experi_step.md)의 "75 cm 책상: DoorFirstCurriculum 2000" 절.
   - `Isaac-Cabinet-BookInsert-DualFR3-UMI-Table75{,-OpenDoor}-v0` (11-06): v2 보상.
   - `Isaac-Cabinet-BookInsert-DualFR3-UMI-Table75-DoorFirst-v0` (11-07): v2 보상 + DoorFirst(문을 다 연 뒤 책). 책 중심이 문 80~90°까지 y −0.14 오른쪽에서 기다린다. rule-based 121/121, 접촉 0, 손잡이 최대 14 N.
 - 75 cm task의 책 무게 DR은 0.15~0.30 kg이다(실물 책 0.25 kg). 실물 책상 윗면을 팔 장착면에서 재니 +0.345 m로 sim과 같아서 책상 높이는 랜덤화하지 않는다.
@@ -146,5 +146,6 @@ link0 좌표는 각 팔의 link0 좌표계 값이다(왼쪽 link0 (0, +0.215, 0)
 2. ~~solver로 75 cm 시작 표를 쓴다~~ (`assets/cabinet_book/start_table_75cm.npz`).
 3. ~~규칙 기반으로 121개 행을 돌려 본다~~ (Table75 121/121 `--ki_cap 0.04`, Table75-DoorFirst 121/121, 접촉 0).
 4. ~~학습한다: Table75-DoorFirst~~ (11-07: Table75-OpenDoor 1000 iteration 뒤 DoorFirst로 이어서 2998, sim 121/121).
+   같은 날 4090에서 `Table75-DoorFirstCurriculum`을 처음부터 2000 iteration 학습(sim 121/121) → 실로봇 기본 정책.
 
 70 cm(책상 최소 높이)는 아직 풀지 않았다.

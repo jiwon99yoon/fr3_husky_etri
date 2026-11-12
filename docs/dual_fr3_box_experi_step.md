@@ -2,7 +2,8 @@
 
 # 빠른 실행
 
-정책은 **SqueezeLift 6697**(실물 성공 80%), 시작 자세는 후보 A(표 줄 1965)다. 다른 정책은 [실로봇 후보](#실로봇-후보-2026-11-05), 설명은 아래 [상세](#상세)에 있다.
+정책은 **GoalXY 5499**(2026-11-07 실물 10회 중 8회, [실물 결과](#실물-결과-goalxy-5499-2026-11-07)), 시작 자세는 후보 A(표 줄 1965)다. 정책 설명은 [5499 보고서](dual_fr3_boxlift_5499_report.md), 다른 정책은 [실로봇 후보](#실로봇-후보-2026-11-05), 절차 설명은 아래 [상세](#상세)에 있다.
+목표 x·y를 옮기려면 [목표 x/y를 옮기는 체크포인트를 쓸 때](#목표-xy를-옮기는-체크포인트를-쓸-때)를 본다.
 
 - 정책을 바꿀 때는 `model_path`만 바꾼다. 모든 후보가 같은 시작 자세 표를 쓰므로 MoveIt 자세, `box_size_m`, `box_position_offset_m`은 그대로다.
 
@@ -31,7 +32,7 @@ cd ~/jw_ws/src/fr3_husky
 # 터미널 1
 export ROS_DOMAIN_ID=87
 ros2 launch fr3_husky_nn_policy dual_fr3_boxlift_policy.launch.py \
-  model_path:=$PWD/fr3_husky_nn_policy/models/facegrip_squeezelift14_model_6697.npz \
+  model_path:=$PWD/fr3_husky_nn_policy/models/facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model_5499.npz \
   box_size_m:="[0.310, 0.410, 0.280]" \
   use_mujoco:=true shadow_mode:=false launch_rviz:=false \
   mujoco_start_row:=1965 goal_z_m:=0.15 \
@@ -68,7 +69,7 @@ ros2 run fr3_husky_nn_policy boxlift_start_helper --move   # 같은 것 + 확인
 ```bash
 # 터미널 1 (shadow: 로봇에 명령을 보내지 않는다). 박스 pose는 비전 /box_tf, 높이 -3 cm 보정
 ros2 launch fr3_husky_nn_policy dual_fr3_boxlift_policy.launch.py \
-  model_path:=$PWD/fr3_husky_nn_policy/models/facegrip_squeezelift14_model_6697.npz \
+  model_path:=$PWD/fr3_husky_nn_policy/models/facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model_5499.npz \
   box_size_m:="[0.310, 0.410, 0.280]" \
   shadow_mode:=true launch_move_group:=true goal_z_m:=0.15 \
   box_pose_topic:=/box_tf box_position_offset_m:="[0.0, 0.0, -0.03]"
@@ -109,16 +110,46 @@ ros2 service call /ppo_boxlift_policy_node/stop_policy std_srvs/srv/Trigger {}
 - 좌표계와 박스 놓는 위치: [dual_fr3_box_real_setup.md](dual_fr3_box_real_setup.md)
 - 실로봇 전에 같은 노드로 MuJoCo에서 돌려 보는 절차는 맨 아래 [Isaac → MuJoCo sim-to-sim](#isaac--mujoco-sim-to-sim)에 있다.
 
+## 실물 결과: GoalXY 5499 (2026-11-07)
+
+- 모델 `facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model_5499.npz`, 명령 모드, 시작은 pregrasp 표(`start_mode` pregrasp_table), 에피소드 4 s.
+- 데이터: `experi_result/video/etri_box_lift_80%_results.csv`(13세션, 첫 세션은 두 줄), 세션 로그 `data/dual_fr3_boxlift_real/<세션>/`, 영상 `experi_result/video/etri_box_lift_80%.webm`.
+- 노드에는 자동 성공 판정이 없다. 로거가 남긴 끝 상태(비전 박스 pose)에 **학습 성공 기준**을 적용했다:
+  박스 중심-목표 3D 거리 < 10 cm, 기울기 < 15°. 학습은 여기에 양 판 접촉과 0.5 s 유지가 더 붙지만, 실물에서는 판 접촉을 잴 수 없어 뺐다.
+- 집계는 마지막 10회(19:37~19:47)다. 앞의 3회(19:24~19:32)는 목표 z 0.15에서 맞춘 회차다(5.2 cm 성공, 12.3 cm 작업자 정지, 5.6 cm 성공).
+
+**10회 중 8회 성공 (80 %)**
+
+| # | 세션 | 목표 (x, y, z) | 3D 오차 (cm) | 기울기 (°) | 결과 | 메모 |
+|---|---|---|---|---|---|---|
+| 1 | 193733 | (0.45, 0, 0.2) | 4.6 | 7.8 | 성공 | |
+| 2 | 193839 | (0.48, 0, 0.2) | 6.3 | 7.8 | 성공 | |
+| 3 | 193950 | (0.42, 0, 0.2) | 2.7 | 7.8 | 성공 | |
+| 4 | 194058 | (0.45, +0.03, 0.2) | 3.9 | 7.1 | 성공 | |
+| 5 | 194207 | (0.45, −0.03, 0.2) | 5.3 | 7.7 | 성공 | |
+| 6 | 194309 | (0.45, 0, 0.3) | 3.8 | 7.0 | 성공 | |
+| 7 | 194405 | (0.48, 0, 0.3) | 54.5 | – | **실패** | 0.55 s에 `fault: joint state is stale`, 박스 안 들림 |
+| 8 | 194516 | (0.42, 0, 0.3) | 54.3 | – | **실패** | 0.55 s에 `fault: joint state is stale`, 박스 안 들림 |
+| 9 | 194626 | (0.45, +0.03, 0.3) | 3.0 | 6.7 | 성공 | |
+| 10 | 194728 | (0.45, −0.03, 0.3) | 3.9 | 7.8 | 성공 | |
+
+- 성공 8회: 3D 오차 평균 4.2 cm(2.7~6.3), 기울기 6.7~7.8°, 4 s를 끝까지 들고 있었다. 박스 중심은 시작 z −0.24에서 목표 높이 근처(z 0.21~0.28)까지 올라갔다.
+- 실패 2회: 0.4 s쯤부터 `/dual_fr3/joint_states`가 들어오지 않아(나이 12 → 62 → 112 ms) 노드가 0.55 s에 멈췄다.
+  그때까지 정책 명령(스텝당 최대 0.09~0.10 rad, 관절 추종 오차 0.06~0.10 rad)은 성공한 6번과 거의 같았다.
+  들다가 놓친 것이 아니라 로봇 쪽이 멈춘 것으로 보인다(Franka reflex나 통신일 수 있으나 로그로는 원인을 모름). 둘 다 목표 z 0.3, x 0.48/0.42 회차다.
+- 큐브 pick-place와 판정 방식이 다르다: 큐브는 노드가 학습 기준(xy 2.5 cm)으로 자동 판정, 박스는 로그 끝 상태를 사후 판정(10 cm, 15°)한다.
+
 ## 실로봇 후보 (2026-11-05)
 
 - 파일은 모두 `fr3_husky_nn_policy/models/`에 있다. 시작 자세 후보(A~E)는 `model/dual_fr3_boxlift_pregrasp_wide_rollalign_<…>_start_poses.yaml`이고, 모든 정책이 같은 시작 자세 표(3956줄)를 쓰므로 내용이 같다.
 - **바꾸는 것은 `model_path` 하나다.** MoveIt 시작 자세, `box_size_m`, `box_position_offset_m`, `goal_z_m`은 그대로 둔다.
-- 순서: 6697로 기준을 한 번 확인하고 LowMuFlat 7200 → 7100 → GoalXY 4700 순으로 본다. 비교하려면 정책마다 같은 박스 위치에서 5회 이상 한다.
+- 11-05에 세운 순서(6697 → LowMuFlat 7200 → 7100 → GoalXY 4700)는 쓰지 않았다. 6697은 실물에서 판이 미끄러지며 박스가 돌았고(결과 판정 기록 없음), 11-07에는 GoalXY 5499로 시험했다.
+- 비교하려면 정책마다 같은 박스 위치에서 5회 이상 한다.
 - 실험이 끝나면 `data/dual_fr3_boxlift/<시각>/`을 `data/dual_fr3_boxlift_real/`로 옮기고 bag도 남긴다(미끄럼·판 높이 분석용).
 
 | 순서 | `model_path` (`fr3_husky_nn_policy/models/`) | 시작 자세 후보 (`model/`) |
 |---|---|---|
-| 기준 | `facegrip_squeezelift14_model_6697.npz` | `…_facegrip_squeezelift_model6697_start_poses.yaml` |
+| (11-05) | `facegrip_squeezelift14_model_6697.npz` | `…_facegrip_squeezelift_model6697_start_poses.yaml` |
 | 1 | `facegrip_squeezelift_lowmuflat_model_7200.npz` | `…_facegrip_squeezelift_lowmuflat_model7200_start_poses.yaml` |
 | 2 | `facegrip_squeezelift_lowmuflat_model_7100.npz` | `…_facegrip_squeezelift_lowmuflat_model7100_start_poses.yaml` |
 | 3 | `facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model_4700.npz` | `…_facegrip_boxdrop_flatsqueeze_lowmusoftlift_goalxy_model4700_start_poses.yaml` |
@@ -128,7 +159,7 @@ sim 비교 (Isaac, 1024 env, 4 s, DR·외란. 미끄럼은 512 env `sim_slip_pro
 
 | | 6697 | LowMuFlat 7200 | LowMuFlat 7100 | GoalXY 4700 | LowMuSoftLift 4500 | FlatSqueeze 3998 |
 |---|---|---|---|---|---|---|
-| 실물 | **80%** | 아직 | 아직 | 기록 필요 | 기록 필요 | 12회 중 1회 |
+| 실물 | 미끄럼 + 회전, 판정 기록 없음 | 안 함 | 안 함 | 안 함 | 1회, 판정 기록 없음 | 12회 중 1회 |
 | 학습 | SqueezeLift | 6697 + 접촉 마찰 0.3~0.85, 503 iter | 같은 run, 403 iter | 4500 + goal x/y, 200 iter | 3998 + 접촉 마찰 0.21~0.64, 들기 가속 제한, 502 iter | FlatSqueeze |
 | 성공 기본 / 낮은 마찰 (접촉 0.3~0.85) | 99.5 / 92.5% | 100 / 99.7% | 100 / 99.9% | 100 / 99.9% | 100 / 100% | 100 / 99.8% |
 | Kp × 0.7 / × 0.5 | 82.7 / 6.9% | 98.8 / 49.3% | 98.2 / 51.0% | 99.9 / 88.8% | 100 / 87.7% | 99.7 / 65.1% |
@@ -137,10 +168,10 @@ sim 비교 (Isaac, 1024 env, 4 s, DR·외란. 미끄럼은 512 env `sim_slip_pro
 | 학습 마찰: 미끄럼 (0.25→0.6 s) / 0.6 s 판 중심 − 박스 중심 | 2.3 / +10.8 cm | 0.5 / +9.7 cm | 0.4 / +9.2 cm | −0.2 / −1.3 cm | 0.0 / +1.5 cm | 0.1 / +5.8 cm |
 | 접촉 마찰 0.25: 미끄럼 median / 최대 기울기 > 20° | 8.8 cm / 50% | 6.3 cm / 17% | 6.4 cm / 22% | 0.5 cm / 4% | 1.4 cm / 7% | 4.4 cm / 25% |
 
-- 7200·7100은 6697의 파지(판이 박스 중심 위 약 10 cm)를 그대로 두고, 낮은 마찰·약한 Kp·접촉 마찰 0.25에서 6697보다 낫다. 실물에서 통한 동작을 유지하므로 다음 후보다.
+- 7200·7100은 6697의 파지(판이 박스 중심 위 약 10 cm)를 그대로 두고, 낮은 마찰·약한 Kp·접촉 마찰 0.25에서 6697보다 낫다. 실물 시험은 안 했다.
   7200은 들 때 기울기와 마찰 0.25 기울기가 7100보다 작고, 7100은 goal 정확도(2.3 vs 3.5 cm)가 조금 낫다.
-- 4700·4500은 sim에서 미끄럼이 가장 적다. 하지만 실물에서 실패한 3998 계보이고, 판이 박스 중심 높이에서 잡는다. sim 지표가 실물 순위를 못 맞췄으므로(6697 보고서 6절) 7xxx 다음에 본다.
-- 쓰지 않는 것: 3998(실물 12회 중 11회 실패), 4997·5499(판을 박스 중심 아래까지 내리고 관절 한계 여유 0.05 rad), LowMuFlat 7696(박스 yaw 33°, export 안 함), 2999·3700·4699·5698(이전 단계).
+- 4700·4500은 sim에서 미끄럼이 가장 적고, 판이 박스 중심 높이에서 잡는다. 같은 run의 GoalXY 5499를 11-07 실물에 올려 10회 중 8회 성공했다([5499 보고서](dual_fr3_boxlift_5499_report.md)).
+- 쓰지 않는 것: 3998(실물 12회 중 11회 실패), 4997(판을 박스 중심 아래까지 내리고 관절 한계 여유 0.05 rad. 5499도 같은 경향이지만 11-07 실물에서 통했다), LowMuFlat 7696(박스 yaw 33°, export 안 함), 2999·3700·4699·5698(이전 단계).
 
 ### ready 자세 시작 후보: LMSL 5800 (4090, 2026-11-05)
 
