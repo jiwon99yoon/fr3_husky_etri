@@ -124,6 +124,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                            $<INSTALL_INTERFACE:include>
 )
+# Several pinocchio installs can be visible at once (e.g. ros-humble-pinocchio
+# under /opt/ros/humble/include). Search the headers of the pinocchio we link
+# against first, otherwise headers and libraries silently mismatch (ABI break).
+get_target_property(_pinocchio_include_dirs pinocchio::pinocchio_headers INTERFACE_INCLUDE_DIRECTORIES)
+target_include_directories(${PROJECT_NAME} SYSTEM BEFORE PRIVATE ${_pinocchio_include_dirs})
 target_link_libraries(${PROJECT_NAME} PUBLIC
                       fr3_controller_parameters
                       fr3_husky_controller_parameters
