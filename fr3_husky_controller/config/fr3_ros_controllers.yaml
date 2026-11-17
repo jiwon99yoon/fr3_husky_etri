@@ -238,6 +238,7 @@
         interpolate: true           # linear segment to each target (false: hold target, pre-11-17)
         interpolation_period: 0.05  # s, segment duration = policy step (20 Hz)
         sync_to_robot: true         # re-base on the robot's executed command q_d (real robot)
+        command_lag_ticks: 1        # cycles until q_d shows a command (single arm FrankaHardwareInterface)
         debug_topic: true           # 1 kHz ~/policy_position_debug (record it in the bag)
       dyros_robot_controller:
         manipulator_joint_gains:
@@ -294,6 +295,7 @@
         interpolate: true           # linear segment to each target (false: hold target, pre-11-17)
         interpolation_period: 0.05  # s, segment duration = policy step (20 Hz)
         sync_to_robot: true         # re-base on the robot's executed command q_d (real robot)
+        command_lag_ticks: 1        # cycles until q_d shows a command (single arm FrankaHardwareInterface)
         debug_topic: true           # 1 kHz ~/policy_position_debug (record it in the bag)
       dyros_robot_controller:
         manipulator_joint_gains:
@@ -357,6 +359,7 @@
         interpolate: true           # linear segment to each target (false: hold target, pre-11-17)
         interpolation_period: 0.05  # s, segment duration = policy step (20 Hz)
         sync_to_robot: true         # re-base on the robot's executed command q_d (real robot)
+        command_lag_ticks: 2        # cycles until q_d shows a command (dual arm FrankaMultiHardwareInterface worker)
         debug_topic: true           # 1 kHz ~/policy_position_debug (record it in the bag)
       dyros_robot_controller:
         manipulator_joint_gains:

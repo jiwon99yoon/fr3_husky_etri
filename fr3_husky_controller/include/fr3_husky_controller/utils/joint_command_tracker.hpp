@@ -17,11 +17,14 @@
 //     sqrt braking curve further out), a* = 4 wp (v* - v) (critically damped).
 //     |v| (incl. the position-dependent limit), |a| and |jerk| are clamped to
 //     limit_fraction of the FR3 limits on the 1 kHz command sequence.
-//   * sync: syncToRobot() re-bases q_r, v, a on the command the robot reports it
-//     executed (libfranka q_d, dq_d, ddq_d), the same base libfranka limitRate
-//     uses.  If the robot stops accepting commands (q_d frozen for 0.38 s before
-//     the 11-17 B3 reflex), the next command stays one limited step away from q_d
-//     instead of drifting with the policy and jumping when the robot resumes.
+//   * sync: rebase() / syncToRobot() re-base q_r, v, a on the command the robot
+//     reports it executed (libfranka q_d, dq_d, ddq_d), the same base libfranka
+//     limitRate uses.  If the robot stops accepting commands (q_d frozen for 0.38 s
+//     before the 11-17 B3 reflex), the next command stays one limited step away
+//     from q_d instead of drifting with the policy and jumping when the robot
+//     resumes.  The caller decides when: q_d is compared with the command written
+//     command_lag_ticks cycles earlier (command_lag_monitor.hpp), because the
+//     dual-arm hardware shows a command one cycle later than the single-arm one.
 //
 // Reference implementation (must stay identical):
 //   dual_fr3_lab/scripts/tools/analyze_position_tracker.py  (tracker_update, LinearTargetPath)
@@ -111,8 +114,17 @@ public:
     }
 
     // Re-base the follower on the robot's last executed command (libfranka q_d,
-    // dq_d, ddq_d) when it differs from the tracker by more than position_tol.
-    // In normal operation q_d equals the previous command, so this is a no-op.
+    // dq_d, ddq_d); the reference segment is unchanged.  Sizes must match.
+    void rebase(const Eigen::VectorXd& q_d, const Eigen::VectorXd& dq_d, const Eigen::VectorXd& ddq_d)
+    {
+        q_ = q_d;
+        v_ = dq_d;
+        a_ = ddq_d;
+    }
+
+    // rebase() when q_d differs from the tracker's last command by more than
+    // position_tol.  Only valid where q_d shows the previous command (single-arm
+    // pipeline); PolicyControl compares with the lag-aware history instead.
     // Returns true when the state was moved.
     bool syncToRobot(
         const Eigen::VectorXd& q_d, const Eigen::VectorXd& dq_d, const Eigen::VectorXd& ddq_d,
@@ -122,9 +134,7 @@ public:
         {
             return false;
         }
-        q_ = q_d;
-        v_ = dq_d;
-        a_ = ddq_d;
+        rebase(q_d, dq_d, ddq_d);
         return true;
     }
 

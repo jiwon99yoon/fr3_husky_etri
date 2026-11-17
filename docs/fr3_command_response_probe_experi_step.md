@@ -31,6 +31,7 @@
 ```
 - 전체 sweep 한 번은 약 10분 걸린다(trial 21개).
 - 모드마다 약 20~25분, 전체 약 1시간으로 잡는다.
+- **11-17 이후 다시 할 때**: 토크 모드 A0~A3는 11-17에 끝났다(`data/command_response/real/261117_18*`). 위치 모드는 B3에서 멈췄다. 그래서 0절, 1절 → 2-1, 2-2, 2-3(토크 모드로 ready까지, A 시험은 안 함) → 3절 전체(B0부터)만 한다. 추종기 코드가 바뀌었으므로 B0~B2도 다시 한다.
 
 ## 얼마나 움직이나
 
@@ -63,8 +64,10 @@
 source ~/jh_ws/ros2_ws/install/setup.bash    # franka underlay (alias jh). 먼저
 source ~/jw_ws/install/setup.bash            # 나중
 ros2 pkg prefix fr3_husky_controller         # /home/husky-rcu/jw_ws/install/fr3_husky_controller 이어야 한다
+ros2 pkg prefix franka_hardware              # /home/husky-rcu/jw_ws/install/franka_hardware 이어야 한다 (limitRate)
 ```
 - jh_ws에도 예전 `fr3_husky_*` 패키지가 있다. jh_ws를 나중에 source하면 jw_ws를 덮어쓴다.
+- franka_hardware는 jw_ws에 복사본(`~/jw_ws/src/franka_ros2`, jh_ws와 같은 커밋 923742e)이 있다. 위치 명령 limitRate가 여기에만 들어 있다. jh_ws는 그대로다.
 - 순서가 틀리면 [문제 생길 때](#문제-생길-때)의 첫 두 줄 에러가 난다.
 
 | 터미널 | 용도 |
@@ -97,6 +100,18 @@ NOTES="notes:=right single arm on new base, EE <hand/판 구성> <질량> kg, co
   ```bash
   cd ~/jw_ws/src/fr3_husky && git pull
   cd ~/jw_ws && colcon build --symlink-install --packages-select fr3_husky_controller fr3_husky_nn_policy
+  ```
+- 빌드 캐시(`~/jw_ws/build/<패키지>`)를 지웠거나 `--cmake-clean-cache`를 쓸 때는 11-05에 정한 옵션을 꼭 다시 준다. 빠지면 pinocchio 3.4(libfranka, /usr/local)와 4.1.0(/opt/openrobots)이 섞여 컨트롤러가 configure에서 죽는다(`free(): invalid pointer`, `model.hxx ... addJoint` assertion).
+  ```bash
+  L="-Wl,--no-as-needed -Wl,--disable-new-dtags -Wl,--version-script=$HOME/jw_ws/cmake/hide_pinocchio.map"
+  colcon build --symlink-install --packages-select fr3_husky_controller --cmake-clean-cache --cmake-args \
+    -DCMAKE_BUILD_TYPE=Release -Dpinocchio_DIR=/opt/openrobots/lib/cmake/pinocchio \
+    -DCMAKE_CXX_FLAGS=-UPINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION \
+    "-DCMAKE_SHARED_LINKER_FLAGS=$L" "-DCMAKE_MODULE_LINKER_FLAGS=$L" -DCMAKE_INSTALL_RPATH=/opt/openrobots/lib
+  ```
+- franka_hardware를 고쳤을 때만 따로 빌드한다(jh_ws의 같은 패키지를 덮어쓰므로 `--allow-overriding`이 필요하다).
+  ```bash
+  cd ~/jw_ws && colcon build --symlink-install --packages-select franka_hardware --allow-overriding franka_hardware
   ```
 
 ## 1. 세션 준비
@@ -195,19 +210,40 @@ probe command_interface:=effort dry_run:=false label:=torque_hold_<자세> tests
 - 설정은 `fr3_ros_controllers.yaml`의 `right_fr3_position_action_controller` → `policy_position_tracker`에 있다.
 - 11-17 동작으로 되돌리려면 `wp: 50.0`, `interpolate: false`, `sync_to_robot: false`로 바꾸고 T1을 다시 띄운다.
 
+**3-0-2. 듀얼 위치 모드를 위해 더 바뀐 것 (11-17 저녁, 로봇 PC)**
+
+듀얼 하드웨어(`FrankaMultiHardwareInterface`)는 두 팔을 1 ms 안에 처리하려고 "상태 읽기 → 지난 tick에 계산한 명령 전송" 순서로 돈다. 그래서 q_d에는 한팔보다 한 tick 늦게, 2 tick 전 명령이 보인다. 위 "기준" 항목을 그대로 쓰면 듀얼에서는 매 tick 잘못 다시 맞추다가 발산한다(시뮬레이션).
+
+| 항목 | 내용 |
+|---|---|
+| q_d 비교 | q_d를 `command_lag_ticks` tick 전 명령과 비교한다. yaml에서 한팔 블록은 1, 듀얼 블록은 2. 한팔 동작은 그대로다 |
+| limitRate | jw_ws의 franka_hardware가 위치 명령을 보내기 직전, 방금 읽은 q_d, dq_d, ddq_d 기준으로 libfranka limitRate를 건다. lowpass는 끈다. 기본으로 켜져 있고 T1 `position_rate_limit:=false`로 끈다. 평상시에는 명령을 자르지 않는다(추종기가 한계의 0.8배 안에서 움직임). 로봇이 멈췄다가 다시 받는 순간만 자른다 |
+| 로봇 시각 멈춤 | 로봇 시각이 100 ms 넘게 그대로면(하드웨어 자동 복구가 실패해 같은 상태만 돌려줌) goal을 `robot time has not advanced for N ms`로 끝낸다 |
+| goal 끝 로그 | q_d가 c_{k-1}, c_{k-2} 중 어느 쪽과 맞았는지 횟수를 남긴다. `command_lag_ticks`가 하드웨어와 다르면 경고한다 |
+| debug 토픽 flags | 32: q_d = c_{k-1}, 64: q_d = c_{k-2} (움직이는 tick에서만) |
+
+- 듀얼에서는 둘 다 필요하다. 보냈지만 아직 q_d에 안 보이는 명령이 항상 하나 있어서, 로봇이 멈췄다 다시 받는 순간은 컨트롤러가 맞출 수 없다. 380 ms 멈춤 시뮬레이션에서 재개 순간 가속도는 limitRate 없이 1260 rad/s², 켜면 10 rad/s²(libfranka 한계에서 자름)였다.
+- `command_lag_ticks`를 한팔에서 2로 잘못 넣으면 매 tick 다시 맞추지만 자기 상태로 맞추는 것이라 움직임은 같다(goal 끝에 경고). 듀얼에서 1로 넣으면 발산하므로 듀얼 블록은 반드시 2다.
+- 듀얼 위치 모드 실물은 이 두 가지가 다 들어간 빌드에서만 한다. 듀얼 T1: `robot_side:=dual command_interface:=position`.
+
 **3-1. T1을 끄고 다시 띄운다**
 ```bash
 ros2 launch fr3_husky_controller fr3_action_controller.launch.py \
   robot_side:=right load_gripper:=false command_interface:=position
 ```
 - 로그에 `Configured and activated right_fr3_position_action_controller`가 나와야 한다.
+- 띄울 때 T1에 `joint position command limitRate: on (FRANKA_JOINT_POSITION_RATE_LIMIT=1), low-pass filter: off`가 나와야 한다. 이 줄이 없으면 jh_ws의 franka_hardware가 뜬 것이다(0절 source 순서와 `ros2 pkg prefix franka_hardware`).
 - probe가 첫 goal을 보내면(B1부터) T1에 아래 내용의 두 줄이 나와야 한다.
   ```
-  position tracker wp=20.0/s limit_fraction=0.80 brake_fraction=0.70 reference=linear 50 ms sync_to_robot_q_d=on debug_topic=on
-  robot state monitor (reflex / control restart stops the policy): on
+  position tracker wp=20.0/s limit_fraction=0.80 brake_fraction=0.70 reference=linear 50 ms sync_to_robot_q_d=on command_lag_ticks=1 debug_topic=on
+  robot state monitor (reflex / control restart / stalled robot time stops the policy): on
   ```
   - 실물에서 `unavailable (sim)`이 나오면 로봇 상태를 못 읽은 것이다. 멈추고 T1 로그에서 `Franka robot state ... not available`을 찾는다.
-- goal이 끝날 때마다 T1에 `q_d sync: N re-syncs, longest run M ms`가 나온다. **0이 정상이다.**
+- goal이 끝날 때마다 T1에 두 줄이 나온다.
+  - `q_d sync: N re-syncs, longest run M ms`: **0이 정상이다.**
+  - `q_d lag check (command_lag_ticks=1): ... q_d = c_{k-1} in A, c_{k-2} in B, neither in C`: 한팔은 A가 거의 전부여야 한다(듀얼은 B).
+- 위치 컨트롤러가 내려갈 때(T1 종료 등) `joint position limitRate (position interface stopped): 0 of N commands cut`이 나온다. 0이 정상이다. 종료 중이라 줄이 안 찍힐 수도 있는데, 잘린 적이 있으면 그때마다 1초에 한 번 경고가 이미 나온다.
+- 예외: T1을 띄운 직후 `limitRate (cutting commands): 1 of 1 commands cut ... max change 0.000001 rad` 정도가 한 번 나오는 것은 정상이다(11-17 실물). 하드웨어가 첫 위치 명령을 측정값으로 채워서 q_d와 µrad 단위로 다른 것을 맞춘 것이다. 이후 summary가 `1 of N`이면 그 한 번뿐이다.
 
 **3-2. T2: 충돌 임계값을 다시 넣는다** (2-2와 같은 명령)
 
@@ -220,9 +256,9 @@ ros2 launch fr3_husky_controller fr3_action_controller.launch.py \
 | 순서 | T4 명령 | 시간 | 확인 |
 |---|---|---|---|
 | B0 dry run | `probe command_interface:=position label:=position_dry "$NOTES"` | 몇 초 | A0와 같다 |
-| B1 유지 | `probe command_interface:=position dry_run:=false label:=position_hold tests:="[hold]" hold_duration_s:=10.0 "$NOTES"` | 약 10 s | 시작과 끝에서 튐이나 reflex가 없는지. T1 로그 두 줄(3-1)과 `q_d sync: 0 re-syncs` |
-| B2 작은 계단 | `probe command_interface:=position dry_run:=false label:=position_step_small tests:="[step]" step_amplitudes_rad:="[0.005]" joints:="[4]" "$NOTES"` | 약 7 s | 0.005 rad 계단을 매끄럽게 따라가는지. `q_d sync: 0 re-syncs` |
-| B3 전체 sweep | `probe command_interface:=position dry_run:=false label:=position_default "$NOTES"` | 약 10분 | A2와 같은 trial 21개. 11-17에 멈춘 trial 15(chirp j2)를 지나는지 |
+| B1 유지 | `probe command_interface:=position dry_run:=false label:=position_hold tests:="[hold]" hold_duration_s:=10.0 "$NOTES"` | 약 10 s | 시작과 끝에서 튐이나 reflex가 없는지. T1 로그 두 줄(3-1)과 `q_d sync: 0 re-syncs`. 팔이 안 움직이므로 `q_d lag check`의 숫자는 모두 0이어도 정상이다 |
+| B2 작은 계단 | `probe command_interface:=position dry_run:=false label:=position_step_small tests:="[step]" step_amplitudes_rad:="[0.005]" joints:="[4]" "$NOTES"` | 약 7 s | 0.005 rad 계단을 매끄럽게 따라가는지. `q_d sync: 0 re-syncs`. 여기서 처음 `q_d lag check`를 본다: c_{k-1}(A)이 거의 전부, c_{k-2}(B)와 neither(C)는 0에 가까워야 한다 |
+| B3 전체 sweep | `probe command_interface:=position dry_run:=false label:=position_default "$NOTES"` | 약 10분 | A2와 같은 trial 21개. 11-17에 멈춘 chirp j2(화면 `[16/21]`, 파일 `trial15_...`)를 지나는지 |
 | B4 정지 | H1: 지금 자세(ready)에서 `probe command_interface:=position dry_run:=false label:=position_hold_H1 tests:="[hold]" "$NOTES"`. H2, H3: 표 아래 "B4 자세 옮기기" | 자세당 약 10 s, H2·H3는 재시작 포함 몇 분 | |
 
 - T1과 T4의 `command_interface`가 다르면 probe가 바로 멈춘다. 두 터미널의 모드를 맞춘다.
@@ -280,7 +316,11 @@ ros2 launch fr3_husky_controller fr3_action_controller.launch.py \
 | T4 `controller ended the goal during the run: success=False, 'robot reflex or control restart (...)'` | reflex 또는 franka_hardware 자동 복구가 났다. 팔은 그 자리에 멈춰 있다. 괄호 안 이유를 적고, 아래 명령으로 reflex 종류를 본다. bag은 5절 `export_position_debug.py`로 본다. 다시 하려면 토크 모드로 `ready`에 돌아간 뒤 3-1부터 한다 |
 | `Reject: not available on the position command interface` | 위치 모드에서 move_to_joint나 JTC를 불렀다. 토크 모드로 다시 띄워 옮긴다(3-4 "B4 자세 옮기기") |
 | T1 경고 `robot q_d has not followed the position command for 50 ms` | 로봇이 명령을 실행하지 않고 있다(11-17 B3 reflex 직전과 같은 상황). 명령은 q_d에 묶여 있어 다시 받아도 튀지 않는다. 시각을 적고, bag을 `export_position_debug.py`로 본다 |
-| `q_d sync: N re-syncs`가 시험 시간(ms)과 비슷하게 큼 | "로봇이 보고하는 q_d = 직전 1 ms 명령"이라는 가정이 틀렸다. 시험을 멈추고, yaml에서 `sync_to_robot: false`로 바꿔 T1을 다시 띄운 뒤 B1부터 한다. bag을 lab PC로 가져온다 |
+| `q_d sync: N re-syncs`가 시험 시간(ms)과 비슷하게 큼 | q_d가 `command_lag_ticks` tick 전 명령과 맞지 않는다. 바로 아래 `q_d lag check` 줄을 본다. A(c_{k-1})나 B(c_{k-2}) 중 큰 쪽이 하드웨어의 실제 지연이다. 그 값으로 yaml `command_lag_ticks`를 고치고 T1을 다시 띄운 뒤 B1부터 한다. 둘 다 작고 C(neither)가 크면 시험을 멈추고 `sync_to_robot: false`로 띄운 뒤 bag을 lab PC로 가져온다 |
+| T1 경고 `q_d followed c_{k-N} but command_lag_ticks=M` | yaml의 `command_lag_ticks`가 하드웨어와 다르다. 경고가 말하는 값으로 고치고 T1을 다시 띄운다 |
+| T1 경고 `joint position limitRate (cutting commands): ...` | franka_hardware가 위치 명령을 잘랐다. 로봇이 멈췄다 다시 받는 순간이면 정상 동작이다(같은 시각에 `robot q_d has not followed` 경고가 있음). 평상시에 계속 나오면 추종기 명령이 한계에 닿은 것이다. 시각과 max change를 적고 bag을 lab PC로 가져온다 |
+| T4 `... 'robot reflex or control restart (<arm>: robot time has not advanced for N ms ...)'` | franka_hardware가 자동 복구나 제어 재시작에 실패해 같은 상태만 돌려준다. T1 로그에서 `Automatic error recovery failed`나 `Restarting active control failed`를 찾는다. T1을 다시 띄운다 |
+| T1에 `joint position command limitRate` 줄이 없음 | jh_ws의 franka_hardware(limitRate 없음)가 떴다. 0절 순서로 다시 source하고 `ros2 pkg prefix franka_hardware`를 확인한다. 듀얼 위치 모드는 이 상태로 하지 않는다 |
 
 ```bash
 find ~/.ros/log -maxdepth 1 -name "ros2_control_node_*.log" -newermt "<시작 시각>" -exec grep -Hn "reflex" {} +

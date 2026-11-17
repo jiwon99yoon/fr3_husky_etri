@@ -199,8 +199,18 @@ bool PolicyControl::readPositionTrackerParams(std::string& error)
         }
         return node_->get_parameter(name).get_value<bool>();
     };
+    const auto read_int = [this](const char* name, int64_t default_value) {
+        if (!node_->has_parameter(name))
+        {
+            node_->declare_parameter(name, default_value);
+        }
+        return node_->get_parameter(name).get_value<int64_t>();
+    };
     bool sync = true;
     bool debug = true;
+    // Default when the yaml has no value: the franka_hardware pipeline of this repo's
+    // descriptions (one arm: FrankaHardwareInterface, two arms: FrankaMultiHardwareInterface).
+    int64_t command_lag = model_updater_.robot_names_.size() > 1 ? 2 : 1;
     try
     {
         params.wp = read(kTrackerWpParam, params.wp);
@@ -210,10 +220,18 @@ bool PolicyControl::readPositionTrackerParams(std::string& error)
         params.interpolation_period = read(kTrackerInterpolationPeriodParam, params.interpolation_period);
         sync = read_bool(kTrackerSyncParam, sync);
         debug = read_bool(kTrackerDebugParam, debug);
+        command_lag = read_int(kTrackerCommandLagParam, command_lag);
     }
     catch (const std::exception& e)
     {
-        error = std::string("position tracker parameter error (floats for numbers, true/false for flags): ") + e.what();
+        error = std::string("position tracker parameter error (floats for numbers, an integer for "
+                            "command_lag_ticks, true/false for flags): ") + e.what();
+        return false;
+    }
+    if (command_lag < 1 || command_lag > utils::CommandLagMonitor::kMaxLag)
+    {
+        error = "policy_position_tracker.command_lag_ticks must be in [1, " +
+                std::to_string(utils::CommandLagMonitor::kMaxLag) + "]";
         return false;
     }
     if (!std::isfinite(params.wp) || params.wp < 5.0 || params.wp > 200.0)
@@ -240,6 +258,7 @@ bool PolicyControl::readPositionTrackerParams(std::string& error)
     position_tracker_params_ = params;
     position_sync_ = sync;
     position_debug_ = debug;
+    position_command_lag_ = static_cast<int>(command_lag);
     return true;
 }
 
@@ -293,6 +312,7 @@ void PolicyControl::onStart()
     robot_time_valid_ = false;
     robot_interrupted_ = false;
     last_robot_time_ms_.assign(num_arms, 0);
+    robot_time_change_s_.assign(num_arms, 0.0);
     motion_error_seen_.assign(num_arms, false);
     if (robot_state_available_)
     {
@@ -330,6 +350,8 @@ void PolicyControl::onStart()
         }
         position_tracker_.setParams(position_tracker_params_);
         position_tracker_.reset(q_start);
+        // At rest the robot holds q_start, so every recent command was q_start.
+        command_lag_.reset(q_start);
         q_hold_ = q_start;
         q_target_ = q_start;
         q_desired_ = q_start;
@@ -354,15 +376,16 @@ void PolicyControl::onStart()
         RCLCPP_INFO(
             node_->get_logger(),
             "[%s] position tracker wp=%.1f/s limit_fraction=%.2f brake_fraction=%.2f "
-            "reference=%s sync_to_robot_q_d=%s debug_topic=%s",
+            "reference=%s sync_to_robot_q_d=%s command_lag_ticks=%d debug_topic=%s",
             name_.c_str(), position_tracker_params_.wp,
             position_tracker_params_.limit_fraction, position_tracker_params_.brake_fraction,
             reference.c_str(),
             !position_sync_ ? "off" : robot_state_available_ ? "on" : "unavailable (sim)",
-            position_debug_ ? "on" : "off");
+            position_command_lag_, position_debug_ ? "on" : "off");
     }
     RCLCPP_INFO(
-        node_->get_logger(), "[%s] robot state monitor (reflex / control restart stops the policy): %s",
+        node_->get_logger(),
+        "[%s] robot state monitor (reflex / control restart / stalled robot time stops the policy): %s",
         name_.c_str(), robot_state_available_ ? "on" : "unavailable (sim)");
 }
 
@@ -577,14 +600,20 @@ void PolicyControl::writeIsaacEffortCommand(double period_s)
 
 void PolicyControl::writeTrackedPositionCommand()
 {
-    // Re-base on the command the robot executed (normally identical to our previous
-    // command, so a no-op).  If the robot stops executing commands, consecutive
-    // re-syncs keep the command one limited step from q_d.
+    // Re-base on the command the robot executed.  q_d normally equals the command
+    // written command_lag_ticks cycles ago (single arm 1, dual arm 2), so this is a
+    // no-op.  If the robot stops executing commands (or the hardware limitRate cut
+    // one), consecutive re-syncs keep the command one limited step from q_d.
     bool resynced = false;
-    if (robot_state_available_ && readRobotCommandState() && position_sync_)
+    if (robot_state_available_ && readRobotCommandState())
     {
-        resynced = position_tracker_.syncToRobot(
-            robot_q_d_, robot_dq_d_, robot_ddq_d_, kSyncPositionTolerance);
+        const bool mismatch =
+            command_lag_.check(robot_q_d_, position_command_lag_, kSyncPositionTolerance);
+        if (mismatch && position_sync_)
+        {
+            position_tracker_.rebase(robot_q_d_, robot_dq_d_, robot_ddq_d_);
+            resynced = true;
+        }
     }
     if (resynced)
     {
@@ -618,6 +647,7 @@ void PolicyControl::writeTrackedPositionCommand()
     qdot_desired_ = position_tracker_.velocity();
     fr3_model_updater_.q_desired_total_ = q_desired_;
     fr3_model_updater_.writeCommand(fr3_model_updater_.q_desired_total_);
+    command_lag_.push(q_desired_);
     publishPositionDebug(resynced);
     position_new_target_ = false;
 }
@@ -654,10 +684,23 @@ bool PolicyControl::robotControlInterrupted(std::string& reason)
         const uint64_t time_ms = state.time.toMSec();
         const bool motion_error = static_cast<bool>(state.last_motion_errors);
         const std::string& arm = model_updater_.robot_names_[r];
+        if (!robot_time_valid_ || time_ms != last_robot_time_ms_[r])
+        {
+            robot_time_change_s_[r] = cycle_time_s_;
+        }
+        const double stalled_s = cycle_time_s_ - robot_time_change_s_[r];
         if (robot_time_valid_ && time_ms > last_robot_time_ms_[r] + kRobotTimeGapMs)
         {
             reason = arm + ": robot time jumped " +
                      std::to_string(time_ms - last_robot_time_ms_[r]) + " ms";
+        }
+        else if (stalled_s > kRobotTimeStallS)
+        {
+            // Every hardware read returns the same (stale) state: franka_hardware could
+            // not recover or restart control.  The state's mode and errors are stale too.
+            reason = arm + ": robot time has not advanced for " +
+                     std::to_string(std::lround(1000.0 * stalled_s)) +
+                     " ms (franka_hardware recovery failed?)";
         }
         else if (state.robot_mode != franka::RobotMode::kMove)
         {
@@ -694,7 +737,9 @@ void PolicyControl::publishPositionDebug(bool resynced)
     //   q_cmd[n] (written), q_d[n], dq_d[n] (robot, read this cycle before the sync),
     //   q_ref[n] (tracker reference), q_target[n] (latest policy target), q[n] (measured)
     // flags: 1 re-synced to q_d, 2 acceleration clamped, 4 velocity clamped,
-    //        8 new policy target this cycle, 16 braking to stop.
+    //        8 new policy target this cycle, 16 braking to stop,
+    //        32 / 64 q_d equals the command written 1 / 2 cycles ago (only on cycles
+    //        where those two commands differ; shows the hardware's command lag).
     // NaN where the robot state is unavailable (MuJoCo).
     if (!position_debug_ || !debug_pub_)
     {
@@ -721,11 +766,14 @@ void PolicyControl::publishPositionDebug(bool resynced)
         msg.layout.dim[0].stride = static_cast<uint32_t>(header + 6 * n);
     }
     const double nan = std::numeric_limits<double>::quiet_NaN();
+    const auto lag_match = command_lag_.lastMatch();
     const int flags = (resynced ? 1 : 0) |
                       (position_tracker_.accelerationClamped() ? 2 : 0) |
                       (position_tracker_.velocityClamped() ? 4 : 0) |
                       (position_new_target_ ? 8 : 0) |
-                      (position_stopping_ ? 16 : 0);
+                      (position_stopping_ ? 16 : 0) |
+                      (lag_match == utils::CommandLagMonitor::Match::kLag1 ? 32 : 0) |
+                      (lag_match == utils::CommandLagMonitor::Match::kLag2 ? 64 : 0);
     auto* d = msg.data.data();
     d[0] = static_cast<double>(cycle);
     d[1] = cycle_time_s_;
@@ -847,7 +895,7 @@ PolicyControl::ComputeResult PolicyControl::compute(
         {
             // Continue from what the robot executes now (after a restart: the pose it
             // holds), so the restarted motion's first command is consistent.
-            position_tracker_.syncToRobot(robot_q_d_, robot_dq_d_, robot_ddq_d_, 0.0);
+            position_tracker_.rebase(robot_q_d_, robot_dq_d_, robot_ddq_d_);
         }
         return finishOrBrake(ComputeResult::ABORTED, now_s);
     }
@@ -1032,6 +1080,27 @@ void PolicyControl::onStop(StopReason reason)
             "[%s] q_d sync: %lu re-syncs, longest run %lu ms (0 when the robot executed every command)",
             name_.c_str(), static_cast<unsigned long>(resync_count_),
             static_cast<unsigned long>(max_resync_run_));
+        // Which command q_d showed while the arm was commanded to move: c_{k-1} on the
+        // single-arm hardware, c_{k-2} on the dual-arm hardware.
+        RCLCPP_INFO(
+            node_->get_logger(),
+            "[%s] q_d lag check (command_lag_ticks=%d): %lu moving cycles, q_d = c_{k-1} in %lu, "
+            "c_{k-2} in %lu, neither in %lu",
+            name_.c_str(), position_command_lag_,
+            static_cast<unsigned long>(command_lag_.movingCycles()),
+            static_cast<unsigned long>(command_lag_.lag1Cycles()),
+            static_cast<unsigned long>(command_lag_.lag2Cycles()),
+            static_cast<unsigned long>(command_lag_.otherCycles()));
+        const int observed_lag = command_lag_.dominantLag(kLagCheckMinCycles, kLagCheckFraction);
+        if (observed_lag != 0 && observed_lag != position_command_lag_)
+        {
+            RCLCPP_WARN(
+                node_->get_logger(),
+                "[%s] q_d followed c_{k-%d} but command_lag_ticks=%d: set "
+                "policy_position_tracker.command_lag_ticks: %d for this controller in "
+                "fr3_ros_controllers.yaml",
+                name_.c_str(), observed_lag, position_command_lag_, observed_lag);
+        }
     }
     if (reason == StopReason::CANCELED)
     {

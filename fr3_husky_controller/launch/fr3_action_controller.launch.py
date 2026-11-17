@@ -183,6 +183,7 @@ def _launch_setup(context, *args, **kwargs):
     launch_move_group    = LaunchConfiguration('launch_move_group').perform(context)
     control_rate_hz      = _positive_integer_launch_argument(context, 'control_rate_hz')
     command_interface    = LaunchConfiguration('command_interface').perform(context).strip().lower()
+    position_rate_limit  = LaunchConfiguration('position_rate_limit').perform(context).strip().lower()
     mujoco_armature      = _nonnegative_float_launch_argument(context, 'mujoco_armature')
     mujoco_damping       = _nonnegative_float_launch_argument(context, 'mujoco_damping')
     mujoco_frictionloss  = _nonnegative_float_launch_argument(context, 'mujoco_frictionloss')
@@ -203,6 +204,8 @@ def _launch_setup(context, *args, **kwargs):
     if command_interface == 'position' and control_rate_hz != 1000:
         # The policy position tracker and the Franka motion generator assume 1 kHz commands.
         raise RuntimeError("command_interface:=position requires control_rate_hz:=1000.")
+    if position_rate_limit not in ('true', 'false'):
+        raise RuntimeError("position_rate_limit must be 'true' or 'false'.")
 
     is_dual = len(robot_sides) == 2
 
@@ -340,6 +343,9 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             on_exit=Shutdown(),
             prefix=controller_prefix,
+            # Read by franka_hardware (jw_ws copy) for the joint position limitRate;
+            # ignored by MuJoCo and by an unmodified franka_hardware.
+            additional_env={'FRANKA_JOINT_POSITION_RATE_LIMIT': '1' if position_rate_limit == 'true' else '0'},
         ),
         # joint_state_publisher: only for real hardware (merges arm + gripper joint states).
         # For MuJoCo, robot_state_publisher subscribes directly via rsp_remappings above.
@@ -556,6 +562,9 @@ def generate_launch_description():
         DeclareLaunchArgument('command_interface',    default_value='effort',
                               description="FR3 joint command interface of the action controller: effort or position "
                                           "(position loads <side>_fr3_position_action_controller; requires 1000 Hz)"),
+        DeclareLaunchArgument('position_rate_limit',  default_value='true',
+                              description="libfranka limitRate on joint position commands in franka_hardware "
+                                          "(jw_ws franka_ros2 copy; needed for dual-arm position mode). true or false"),
         DeclareLaunchArgument('mujoco_armature',      default_value='0.1', description='MuJoCo FR3 joint armature'),
         DeclareLaunchArgument('mujoco_damping',       default_value='0.003', description='MuJoCo FR3 joint viscous damping'),
         DeclareLaunchArgument('mujoco_frictionloss',  default_value='0.2', description='MuJoCo FR3 joint Coulomb friction loss'),

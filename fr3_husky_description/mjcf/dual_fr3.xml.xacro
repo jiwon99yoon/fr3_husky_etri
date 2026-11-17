@@ -99,6 +99,22 @@
                     value="${'0 0 0.523598776;0 0 -0.523598776' if '$(arg mobile)' == 'true' else '0 0 0;0 0 0'}" />
 
     <xacro:arg name="control_mode" default="effort" />
+    <!-- mujoco_ros_hardware FrankaMultiSubHandler passes the mode per arm
+         (control_mode_<i> for prefix_<i>), not control_mode.  Without these the dual
+         scene always had effort (motor) actuators, so position commands in rad were
+         applied as torques.  control_mode stays the fallback for other callers. -->
+    <xacro:arg name="prefix_0" default="left" />
+    <xacro:arg name="prefix_1" default="right" />
+    <xacro:arg name="control_mode_0" default="" />
+    <xacro:arg name="control_mode_1" default="" />
+    <xacro:property name="arm0_control_mode"
+                    value="${'$(arg control_mode_0)' if '$(arg control_mode_0)' else '$(arg control_mode)'}" />
+    <xacro:property name="arm1_control_mode"
+                    value="${'$(arg control_mode_1)' if '$(arg control_mode_1)' else '$(arg control_mode)'}" />
+    <xacro:property name="left_control_mode"
+                    value="${arm0_control_mode if '$(arg prefix_0)' == 'left' else arm1_control_mode}" />
+    <xacro:property name="right_control_mode"
+                    value="${arm1_control_mode if '$(arg prefix_1)' == 'right' else arm0_control_mode}" />
 
     <!-- Reach dynamics ablation parameters. The launch file generates the
          dynamics YAML for all seven joints; physics timestep remains 1 ms. -->
@@ -344,8 +360,8 @@
     </worldbody>
 
     <!-- Arm actuators (left + right) -->
-    <xacro:franka_arm_actuator arm_id="$(arg arm_id)" arm_prefix="left" no_prefix="false" control_mode="$(arg control_mode)" />
-    <xacro:franka_arm_actuator arm_id="$(arg arm_id)" arm_prefix="right" no_prefix="false" control_mode="$(arg control_mode)" />
+    <xacro:franka_arm_actuator arm_id="$(arg arm_id)" arm_prefix="left" no_prefix="false" control_mode="${left_control_mode}" />
+    <xacro:franka_arm_actuator arm_id="$(arg arm_id)" arm_prefix="right" no_prefix="false" control_mode="${right_control_mode}" />
 
     <!-- Hand actuators (left + right) -->
     <xacro:if value="${'$(arg hand)' == 'true'}">

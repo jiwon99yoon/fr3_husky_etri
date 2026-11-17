@@ -17,6 +17,7 @@
 
 #include <fr3_husky_controller/model/fr3_model_updater.hpp>
 #include <fr3_husky_controller/servers/action_server_base.hpp>
+#include <fr3_husky_controller/utils/command_lag_monitor.hpp>
 #include <fr3_husky_controller/utils/joint_command_tracker.hpp>
 
 namespace fr3_husky_controller::servers::fr3
@@ -47,6 +48,10 @@ public:
     static constexpr const char* kTrackerInterpolationPeriodParam = "policy_position_tracker.interpolation_period";
     // bool: re-base the tracker on the robot's executed command q_d (real robot only).
     static constexpr const char* kTrackerSyncParam = "policy_position_tracker.sync_to_robot";
+    // int: cycles from writing a position command to seeing it in the robot's q_d.
+    // 1: single arm (FrankaHardwareInterface), 2: dual arm (FrankaMultiHardwareInterface
+    // worker writes the previous cycle's command).  See command_lag_monitor.hpp.
+    static constexpr const char* kTrackerCommandLagParam = "policy_position_tracker.command_lag_ticks";
     // bool: publish the 1 kHz position diagnostics on ~/policy_position_debug.
     static constexpr const char* kTrackerDebugParam = "policy_position_tracker.debug_topic";
     bool allowPreemption() const override { return false; }
@@ -136,6 +141,10 @@ private:
     bool position_sync_{true};
     bool position_debug_{true};
     bool position_new_target_{false};
+    int position_command_lag_{1};
+    // Commands written over the last cycles: q_d is compared with the one written
+    // position_command_lag_ cycles ago (re-sync) and with c_{k-1} / c_{k-2} (statistics).
+    utils::CommandLagMonitor command_lag_;
     ComputeResult position_stop_result_{ComputeResult::ABORTED};
     double position_stop_start_s_{0.0};
     Eigen::VectorXd position_stop_target_;
@@ -149,6 +158,7 @@ private:
     bool robot_time_valid_{false};
     bool robot_interrupted_{false};
     std::vector<uint64_t> last_robot_time_ms_;
+    std::vector<double> robot_time_change_s_;  // controller time when the robot time last advanced
     std::vector<bool> motion_error_seen_;
     Eigen::VectorXd robot_q_d_;
     Eigen::VectorXd robot_dq_d_;
@@ -163,10 +173,18 @@ private:
     // A normal cycle advances robot time by 1 ms (2 ms after one missed packet);
     // the automatic error recovery + control restart takes tens of ms.
     static constexpr uint64_t kRobotTimeGapMs = 20;
-    // q_d equals the previous command in normal operation; re-sync beyond this.
+    // Robot time not advancing at all: franka_hardware returns a stale state (its
+    // automatic error recovery or control restart failed).
+    static constexpr double kRobotTimeStallS = 0.1;
+    // q_d equals the command written command_lag_ticks cycles ago in normal
+    // operation; re-sync beyond this.
     static constexpr double kSyncPositionTolerance = 1.0e-6;  // rad
     // Consecutive re-syncs = robot not executing the commands; warn after this many cycles.
     static constexpr uint64_t kFrozenWarnCycles = 50;
+    // Goal-end check of command_lag_ticks: q_d must follow one lag in this fraction
+    // of at least this many moving cycles before a mismatch is reported.
+    static constexpr uint64_t kLagCheckMinCycles = 200;
+    static constexpr double kLagCheckFraction = 0.9;
 
     std::string result_message_{"not started"};
 
