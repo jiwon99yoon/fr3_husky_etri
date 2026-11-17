@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 
 namespace fr3_husky_controller::servers::fr3
@@ -18,6 +20,21 @@ FR3ModelUpdater& getFR3ModelUpdater(ModelUpdaterBase& model_updater, const std::
     }
     return *updater;
 }
+
+const char* robotModeName(franka::RobotMode mode)
+{
+    switch (mode)
+    {
+        case franka::RobotMode::kOther: return "Other";
+        case franka::RobotMode::kIdle: return "Idle";
+        case franka::RobotMode::kMove: return "Move";
+        case franka::RobotMode::kGuiding: return "Guiding";
+        case franka::RobotMode::kReflex: return "Reflex";
+        case franka::RobotMode::kUserStopped: return "UserStopped";
+        case franka::RobotMode::kAutomaticErrorRecovery: return "AutomaticErrorRecovery";
+    }
+    return "unknown";
+}
 }  // namespace
 
 PolicyControl::PolicyControl(
@@ -30,6 +47,9 @@ PolicyControl::PolicyControl(
         "policy_joint_command",
         rclcpp::QoS(1).best_effort(),
         std::bind(&PolicyControl::commandCallback, this, std::placeholders::_1));
+    // 1 kHz position-mode diagnostics (layout in publishPositionDebug); record it in the bag.
+    debug_pub_ = std::make_unique<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>>(
+        node_->create_publisher<std_msgs::msg::Float64MultiArray>("~/policy_position_debug", rclcpp::QoS(100)));
 
     RCLCPP_INFO(
         node_->get_logger(),
@@ -172,15 +192,28 @@ bool PolicyControl::readPositionTrackerParams(std::string& error)
         }
         return node_->get_parameter(name).get_value<double>();
     };
+    const auto read_bool = [this](const char* name, bool default_value) {
+        if (!node_->has_parameter(name))
+        {
+            node_->declare_parameter(name, default_value);
+        }
+        return node_->get_parameter(name).get_value<bool>();
+    };
+    bool sync = true;
+    bool debug = true;
     try
     {
         params.wp = read(kTrackerWpParam, params.wp);
         params.limit_fraction = read(kTrackerLimitFractionParam, params.limit_fraction);
         params.brake_fraction = read(kTrackerBrakeFractionParam, params.brake_fraction);
+        params.interpolate = read_bool(kTrackerInterpolateParam, params.interpolate);
+        params.interpolation_period = read(kTrackerInterpolationPeriodParam, params.interpolation_period);
+        sync = read_bool(kTrackerSyncParam, sync);
+        debug = read_bool(kTrackerDebugParam, debug);
     }
     catch (const std::exception& e)
     {
-        error = std::string("position tracker parameter error (use float values): ") + e.what();
+        error = std::string("position tracker parameter error (floats for numbers, true/false for flags): ") + e.what();
         return false;
     }
     if (!std::isfinite(params.wp) || params.wp < 5.0 || params.wp > 200.0)
@@ -198,7 +231,15 @@ bool PolicyControl::readPositionTrackerParams(std::string& error)
         error = "policy_position_tracker.brake_fraction must be in (0, 0.95]";
         return false;
     }
+    if (!std::isfinite(params.interpolation_period) ||
+        params.interpolation_period < 0.005 || params.interpolation_period > 0.2)
+    {
+        error = "policy_position_tracker.interpolation_period must be in [0.005, 0.2] s";
+        return false;
+    }
     position_tracker_params_ = params;
+    position_sync_ = sync;
+    position_debug_ = debug;
     return true;
 }
 
@@ -238,6 +279,36 @@ void PolicyControl::onStart()
     last_gripper_state_ = -1;
     result_message_ = "running";
     position_stopping_ = false;
+    position_new_target_ = false;
+
+    // Real robot state per arm (q_d sync, reflex stop).  MuJoCo has none.
+    const size_t num_arms = model_updater_.robot_names_.size();
+    robot_states_.assign(num_arms, nullptr);
+    robot_state_available_ = num_arms > 0 && num_arms * FR3_DOF == model_updater_.manipulator_dof_;
+    for (size_t r = 0; r < num_arms; ++r)
+    {
+        robot_states_[r] = model_updater_.getFrankaRobotState(r);
+        robot_state_available_ = robot_state_available_ && robot_states_[r] != nullptr;
+    }
+    robot_time_valid_ = false;
+    robot_interrupted_ = false;
+    last_robot_time_ms_.assign(num_arms, 0);
+    motion_error_seen_.assign(num_arms, false);
+    if (robot_state_available_)
+    {
+        // Errors already latched before this goal are not this goal's reflex.
+        for (size_t r = 0; r < num_arms; ++r)
+        {
+            motion_error_seen_[r] = static_cast<bool>(robot_states_[r]->last_motion_errors);
+        }
+    }
+    robot_q_d_ = Eigen::VectorXd::Zero(model_updater_.manipulator_dof_);
+    robot_dq_d_ = Eigen::VectorXd::Zero(model_updater_.manipulator_dof_);
+    robot_ddq_d_ = Eigen::VectorXd::Zero(model_updater_.manipulator_dof_);
+    resync_count_ = 0;
+    resync_run_ = 0;
+    max_resync_run_ = 0;
+    debug_cycle_ = 0;
 
     if (position_mode_)
     {
@@ -251,6 +322,11 @@ void PolicyControl::onStart()
                 node_->get_logger(),
                 "[%s] no valid held position command; tracker starts at the measured position",
                 name_.c_str());
+        }
+        if (position_sync_ && readRobotCommandState())
+        {
+            // Start from what the robot executes (normally equal to the held command).
+            q_start = robot_q_d_;
         }
         position_tracker_.setParams(position_tracker_params_);
         position_tracker_.reset(q_start);
@@ -272,12 +348,22 @@ void PolicyControl::onStart()
         joint_acceleration_scale_, mode, control_gripper_ ? "true" : "false");
     if (position_mode_)
     {
+        const std::string reference = position_tracker_params_.interpolate
+            ? "linear " + std::to_string(std::lround(1000.0 * position_tracker_params_.interpolation_period)) + " ms"
+            : std::string("hold");
         RCLCPP_INFO(
             node_->get_logger(),
-            "[%s] position tracker wp=%.1f/s (linear delay %.1f ms) limit_fraction=%.2f brake_fraction=%.2f",
-            name_.c_str(), position_tracker_params_.wp, 1000.0 / position_tracker_params_.wp,
-            position_tracker_params_.limit_fraction, position_tracker_params_.brake_fraction);
+            "[%s] position tracker wp=%.1f/s limit_fraction=%.2f brake_fraction=%.2f "
+            "reference=%s sync_to_robot_q_d=%s debug_topic=%s",
+            name_.c_str(), position_tracker_params_.wp,
+            position_tracker_params_.limit_fraction, position_tracker_params_.brake_fraction,
+            reference.c_str(),
+            !position_sync_ ? "off" : robot_state_available_ ? "on" : "unavailable (sim)",
+            position_debug_ ? "on" : "off");
     }
+    RCLCPP_INFO(
+        node_->get_logger(), "[%s] robot state monitor (reflex / control restart stops the policy): %s",
+        name_.c_str(), robot_state_available_ ? "on" : "unavailable (sim)");
 }
 
 void PolicyControl::commandCallback(
@@ -489,15 +575,182 @@ void PolicyControl::writeIsaacEffortCommand(double period_s)
     fr3_model_updater_.writeCommand(fr3_model_updater_.torque_desired_total_);
 }
 
-void PolicyControl::writeTrackedPositionCommand(const Eigen::VectorXd& target)
+void PolicyControl::writeTrackedPositionCommand()
 {
+    // Re-base on the command the robot executed (normally identical to our previous
+    // command, so a no-op).  If the robot stops executing commands, consecutive
+    // re-syncs keep the command one limited step from q_d.
+    bool resynced = false;
+    if (robot_state_available_ && readRobotCommandState() && position_sync_)
+    {
+        resynced = position_tracker_.syncToRobot(
+            robot_q_d_, robot_dq_d_, robot_ddq_d_, kSyncPositionTolerance);
+    }
+    if (resynced)
+    {
+        ++resync_count_;
+        ++resync_run_;
+        if (resync_run_ == kFrozenWarnCycles)
+        {
+            RCLCPP_WARN(
+                node_->get_logger(),
+                "[%s] robot q_d has not followed the position command for %lu ms "
+                "(robot not executing commands); command held at q_d",
+                name_.c_str(), static_cast<unsigned long>(resync_run_));
+        }
+    }
+    else if (resync_run_ > 0)
+    {
+        if (resync_run_ >= kFrozenWarnCycles)
+        {
+            RCLCPP_WARN(
+                node_->get_logger(), "[%s] robot q_d follows the command again after %lu ms",
+                name_.c_str(), static_cast<unsigned long>(resync_run_));
+        }
+        max_resync_run_ = std::max(max_resync_run_, resync_run_);
+        resync_run_ = 0;
+    }
+
     // Fixed 1 ms step: the robot evaluates q_d derivatives per 1 kHz packet, so
     // a late controller cycle must not enlarge the step.
-    position_tracker_.step(target);
+    position_tracker_.step();
     q_desired_ = position_tracker_.position();
     qdot_desired_ = position_tracker_.velocity();
     fr3_model_updater_.q_desired_total_ = q_desired_;
     fr3_model_updater_.writeCommand(fr3_model_updater_.q_desired_total_);
+    publishPositionDebug(resynced);
+    position_new_target_ = false;
+}
+
+bool PolicyControl::readRobotCommandState()
+{
+    if (!robot_state_available_)
+    {
+        return false;
+    }
+    for (size_t r = 0; r < robot_states_.size(); ++r)
+    {
+        const franka::RobotState& state = *robot_states_[r];
+        for (size_t j = 0; j < FR3_DOF; ++j)
+        {
+            const Eigen::Index index = static_cast<Eigen::Index>(r * FR3_DOF + j);
+            robot_q_d_(index) = state.q_d[j];
+            robot_dq_d_(index) = state.dq_d[j];
+            robot_ddq_d_(index) = state.ddq_d[j];
+        }
+    }
+    return true;
+}
+
+bool PolicyControl::robotControlInterrupted(std::string& reason)
+{
+    if (!robot_state_available_)
+    {
+        return false;
+    }
+    for (size_t r = 0; r < robot_states_.size(); ++r)
+    {
+        const franka::RobotState& state = *robot_states_[r];
+        const uint64_t time_ms = state.time.toMSec();
+        const bool motion_error = static_cast<bool>(state.last_motion_errors);
+        const std::string& arm = model_updater_.robot_names_[r];
+        if (robot_time_valid_ && time_ms > last_robot_time_ms_[r] + kRobotTimeGapMs)
+        {
+            reason = arm + ": robot time jumped " +
+                     std::to_string(time_ms - last_robot_time_ms_[r]) + " ms";
+        }
+        else if (state.robot_mode != franka::RobotMode::kMove)
+        {
+            reason = arm + ": robot mode " + robotModeName(state.robot_mode);
+        }
+        else if (static_cast<bool>(state.current_errors))
+        {
+            reason = arm + ": current errors " + static_cast<std::string>(state.current_errors);
+        }
+        else if (motion_error && !motion_error_seen_[r])
+        {
+            reason = arm + ": new last motion errors";
+        }
+        last_robot_time_ms_[r] = time_ms;
+        motion_error_seen_[r] = motion_error;
+        if (!reason.empty())
+        {
+            if (motion_error)
+            {
+                reason += ", last motion errors " + static_cast<std::string>(state.last_motion_errors);
+            }
+            return true;
+        }
+    }
+    robot_time_valid_ = true;
+    return false;
+}
+
+void PolicyControl::publishPositionDebug(bool resynced)
+{
+    // Layout per sample (n = manipulator dof, m = arms):
+    //   cycle, ros_time_s, period_s, policy_sequence, flags,
+    //   robot_time_s[m], command_success_rate[m],
+    //   q_cmd[n] (written), q_d[n], dq_d[n] (robot, read this cycle before the sync),
+    //   q_ref[n] (tracker reference), q_target[n] (latest policy target), q[n] (measured)
+    // flags: 1 re-synced to q_d, 2 acceleration clamped, 4 velocity clamped,
+    //        8 new policy target this cycle, 16 braking to stop.
+    // NaN where the robot state is unavailable (MuJoCo).
+    if (!position_debug_ || !debug_pub_)
+    {
+        return;
+    }
+    const uint64_t cycle = debug_cycle_++;
+    if (!debug_pub_->trylock())
+    {
+        return;  // publisher busy: this sample is dropped (cycle counter shows the gap)
+    }
+    const size_t n = static_cast<size_t>(q_desired_.size());
+    const size_t m = robot_states_.size();
+    const size_t header = 5 + 2 * m;
+    auto& msg = debug_pub_->msg_;
+    if (msg.data.size() != header + 6 * n)
+    {
+        msg.data.resize(header + 6 * n);
+        msg.layout.dim.resize(1);
+        msg.layout.dim[0].label =
+            "cycle,ros_time_s,period_s,policy_sequence,flags,robot_time_s[m],command_success_rate[m],"
+            "q_cmd[n],q_d[n],dq_d[n],q_ref[n],q_target[n],q[n]; m=" + std::to_string(m) +
+            " n=" + std::to_string(n);
+        msg.layout.dim[0].size = static_cast<uint32_t>(header + 6 * n);
+        msg.layout.dim[0].stride = static_cast<uint32_t>(header + 6 * n);
+    }
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const int flags = (resynced ? 1 : 0) |
+                      (position_tracker_.accelerationClamped() ? 2 : 0) |
+                      (position_tracker_.velocityClamped() ? 4 : 0) |
+                      (position_new_target_ ? 8 : 0) |
+                      (position_stopping_ ? 16 : 0);
+    auto* d = msg.data.data();
+    d[0] = static_cast<double>(cycle);
+    d[1] = cycle_time_s_;
+    d[2] = cycle_period_s_;
+    d[3] = static_cast<double>(last_sequence_);
+    d[4] = static_cast<double>(flags);
+    for (size_t r = 0; r < m; ++r)
+    {
+        const franka::RobotState* state = robot_state_available_ ? robot_states_[r] : nullptr;
+        d[5 + r] = state ? state->time.toSec() : nan;
+        d[5 + m + r] = state ? state->control_command_success_rate : nan;
+    }
+    const auto& q_ref = position_tracker_.reference();
+    const auto& q_meas = fr3_model_updater_.q_total_;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const Eigen::Index k = static_cast<Eigen::Index>(i);
+        d[header + i] = q_desired_(k);
+        d[header + n + i] = robot_state_available_ ? robot_q_d_(k) : nan;
+        d[header + 2 * n + i] = robot_state_available_ ? robot_dq_d_(k) : nan;
+        d[header + 3 * n + i] = k < q_ref.size() ? q_ref(k) : nan;
+        d[header + 4 * n + i] = k < q_target_.size() ? q_target_(k) : nan;
+        d[header + 5 * n + i] = k < q_meas.size() ? q_meas(k) : nan;
+    }
+    debug_pub_->unlockAndPublish();
 }
 
 PolicyControl::ComputeResult PolicyControl::finishOrBrake(ComputeResult result, double now_s)
@@ -510,6 +763,7 @@ PolicyControl::ComputeResult PolicyControl::finishOrBrake(ComputeResult result, 
     position_stop_result_ = result;
     position_stop_start_s_ = now_s;
     position_stop_target_ = position_tracker_.stoppingTarget();
+    position_tracker_.holdTarget(position_stop_target_);
     RCLCPP_INFO(
         node_->get_logger(), "[%s] braking position command to rest before stopping (%s)",
         name_.c_str(), result_message_.c_str());
@@ -518,7 +772,7 @@ PolicyControl::ComputeResult PolicyControl::finishOrBrake(ComputeResult result, 
 
 PolicyControl::ComputeResult PolicyControl::continuePositionStop(double now_s)
 {
-    writeTrackedPositionCommand(position_stop_target_);
+    writeTrackedPositionCommand();
     const bool at_rest =
         position_tracker_.isAtRest(kPositionRestVelocity, kPositionRestAcceleration);
     if (at_rest || now_s - position_stop_start_s_ >= kPositionStopTimeoutS)
@@ -576,6 +830,28 @@ PolicyControl::ComputeResult PolicyControl::compute(
     const rclcpp::Time& time, const rclcpp::Duration& period)
 {
     const double now_s = time.seconds();
+    cycle_time_s_ = now_s;
+    cycle_period_s_ = period.seconds();
+
+    std::string interruption;
+    if (!robot_interrupted_ && robotControlInterrupted(interruption))
+    {
+        // A reflex (or anything that made the hardware restart control) ends the policy:
+        // never continue it on the restarted robot.
+        robot_interrupted_ = true;
+        result_message_ = "robot reflex or control restart (" + interruption + ")";
+        RCLCPP_ERROR(
+            node_->get_logger(), "[%s] %s; policy stopped",
+            name_.c_str(), result_message_.c_str());
+        if (position_mode_ && readRobotCommandState())
+        {
+            // Continue from what the robot executes now (after a restart: the pose it
+            // holds), so the restarted motion's first command is consistent.
+            position_tracker_.syncToRobot(robot_q_d_, robot_dq_d_, robot_ddq_d_, 0.0);
+        }
+        return finishOrBrake(ComputeResult::ABORTED, now_s);
+    }
+
     if (position_stopping_)
     {
         // Ignore further policy commands while braking to rest.
@@ -625,6 +901,12 @@ PolicyControl::ComputeResult PolicyControl::compute(
         if (isaac_relative_control_)
         {
             refresh_isaac_relative_target_ = command->relative_position_offsets;
+            if (position_mode_)
+            {
+                // New segment of the tracker reference towards this policy target.
+                position_tracker_.setTarget(q_target_);
+                position_new_target_ = true;
+            }
         }
         last_sequence_ = command->sequence;
         last_command_time_s_ = command->received_time_s;
@@ -682,9 +964,9 @@ PolicyControl::ComputeResult PolicyControl::compute(
         }
         else if (model_updater_.HasPositionCommandInterface())
         {
-            // The policy-step target (measured q at the 20 Hz tick + offset) is held
-            // (zero-order hold); the tracker turns it into a limit-respecting q_d.
-            writeTrackedPositionCommand(q_target_);
+            // The policy-step target (measured q at the 20 Hz tick + offset) starts a
+            // linear reference segment; the tracker turns it into a limit-respecting q_d.
+            writeTrackedPositionCommand();
         }
         else
         {
@@ -742,6 +1024,15 @@ PolicyControl::ComputeResult PolicyControl::compute(
 void PolicyControl::onStop(StopReason reason)
 {
     model_updater_.haltCommands();
+    if (position_mode_ && robot_state_available_)
+    {
+        max_resync_run_ = std::max(max_resync_run_, resync_run_);
+        RCLCPP_INFO(
+            node_->get_logger(),
+            "[%s] q_d sync: %lu re-syncs, longest run %lu ms (0 when the robot executed every command)",
+            name_.c_str(), static_cast<unsigned long>(resync_count_),
+            static_cast<unsigned long>(max_resync_run_));
+    }
     if (reason == StopReason::CANCELED)
     {
         result_message_ = "policy control canceled";

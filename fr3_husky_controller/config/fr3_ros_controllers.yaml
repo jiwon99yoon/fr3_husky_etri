@@ -228,12 +228,17 @@
         - effort
       manipulator_command_interface:
         position
-      # PolicyControl (isaac_relative_control) position path: 20 Hz held target -> 1 kHz
-      # tracker.  Must match the Isaac Lab position-mode action term.  Use floats.
+      # PolicyControl (isaac_relative_control) position path: 20 Hz policy target -> linear
+      # reference segment -> 1 kHz limited tracker (joint_command_tracker.hpp).  Offline
+      # reference: dual_fr3_lab scripts/tools/analyze_position_tracker.py.  Use floats.
       policy_position_tracker:
-        wp: 50.0              # 1/s, linear-region delay 1/wp = 20 ms
-        limit_fraction: 0.8   # of the FR3 velocity/acceleration/jerk limits
-        brake_fraction: 0.7   # braking deceleration / acceleration limit
+        wp: 20.0                    # 1/s, follower gain (with velocity feed-forward)
+        limit_fraction: 0.8         # of the FR3 velocity/acceleration/jerk limits
+        brake_fraction: 0.7         # braking deceleration / acceleration limit
+        interpolate: true           # linear segment to each target (false: hold target, pre-11-17)
+        interpolation_period: 0.05  # s, segment duration = policy step (20 Hz)
+        sync_to_robot: true         # re-base on the robot's executed command q_d (real robot)
+        debug_topic: true           # 1 kHz ~/policy_position_debug (record it in the bag)
       dyros_robot_controller:
         manipulator_joint_gains:
           kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
@@ -279,12 +284,17 @@
         - effort
       manipulator_command_interface:
         position
-      # PolicyControl (isaac_relative_control) position path: 20 Hz held target -> 1 kHz
-      # tracker.  Must match the Isaac Lab position-mode action term.  Use floats.
+      # PolicyControl (isaac_relative_control) position path: 20 Hz policy target -> linear
+      # reference segment -> 1 kHz limited tracker (joint_command_tracker.hpp).  Offline
+      # reference: dual_fr3_lab scripts/tools/analyze_position_tracker.py.  Use floats.
       policy_position_tracker:
-        wp: 50.0              # 1/s, linear-region delay 1/wp = 20 ms
-        limit_fraction: 0.8   # of the FR3 velocity/acceleration/jerk limits
-        brake_fraction: 0.7   # braking deceleration / acceleration limit
+        wp: 20.0                    # 1/s, follower gain (with velocity feed-forward)
+        limit_fraction: 0.8         # of the FR3 velocity/acceleration/jerk limits
+        brake_fraction: 0.7         # braking deceleration / acceleration limit
+        interpolate: true           # linear segment to each target (false: hold target, pre-11-17)
+        interpolation_period: 0.05  # s, segment duration = policy step (20 Hz)
+        sync_to_robot: true         # re-base on the robot's executed command q_d (real robot)
+        debug_topic: true           # 1 kHz ~/policy_position_debug (record it in the bag)
       dyros_robot_controller:
         manipulator_joint_gains:
           kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
@@ -337,12 +347,17 @@
         - effort
       manipulator_command_interface:
         position
-      # PolicyControl (isaac_relative_control) position path: 20 Hz held target -> 1 kHz
-      # tracker.  Must match the Isaac Lab position-mode action term.  Use floats.
+      # PolicyControl (isaac_relative_control) position path: 20 Hz policy target -> linear
+      # reference segment -> 1 kHz limited tracker (joint_command_tracker.hpp).  Offline
+      # reference: dual_fr3_lab scripts/tools/analyze_position_tracker.py.  Use floats.
       policy_position_tracker:
-        wp: 50.0              # 1/s, linear-region delay 1/wp = 20 ms
-        limit_fraction: 0.8   # of the FR3 velocity/acceleration/jerk limits
-        brake_fraction: 0.7   # braking deceleration / acceleration limit
+        wp: 20.0                    # 1/s, follower gain (with velocity feed-forward)
+        limit_fraction: 0.8         # of the FR3 velocity/acceleration/jerk limits
+        brake_fraction: 0.7         # braking deceleration / acceleration limit
+        interpolate: true           # linear segment to each target (false: hold target, pre-11-17)
+        interpolation_period: 0.05  # s, segment duration = policy step (20 Hz)
+        sync_to_robot: true         # re-base on the robot's executed command q_d (real robot)
+        debug_topic: true           # 1 kHz ~/policy_position_debug (record it in the bag)
       dyros_robot_controller:
         manipulator_joint_gains:
           kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0,

@@ -4,7 +4,7 @@
 
 **무엇을 하나:** 오른팔을 ready 자세에 세워 두고, 관절을 하나씩 조금 흔든다(sweep). 그동안 20 Hz 관절 목표에서 실제 관절 위치까지의 지연과 응답을 잰다. 같은 시험을 두 모드로 한 번씩 한다.
 - **토크 모드**: 지금 박스 정책이 쓰는 경로(PD Kp 80)
-- **위치 모드**: 새로 추가한 경로(1 kHz 저크 제한 추종기). 실물에서는 처음 쓴다
+- **위치 모드**: 새로 추가한 경로(1 kHz 저크 제한 추종기). 11-17 B3에서 reflex가 나서 추종기를 고쳤다(3-0)
 
 결과는 sim 액추에이터 보정에 쓴다(lab `docs/todo_1116.md` §2, §6).
 
@@ -25,7 +25,8 @@
 0. 터미널 준비 (T1~T4 모두 source)
 1. 세션 준비 (Desk EE, 비상정지)
 2. 토크 모드:  T1 effort → 임계값 → ready → A0 dry run → A1 j4 계단 → A2 전체 sweep → A3 정지 자세 3개
-3. 위치 모드:  T1 position → 임계값 → ready → B0 dry run → B1 유지 → B2 작은 계단 → B3 전체 sweep → B4 정지 자세 3개
+3. 위치 모드:  (ready는 2에서 토크 모드로) T1 position → 임계값 → B0 dry run → B1 유지 → B2 작은 계단 → B3 전체 sweep
+               → B4 정지 자세 3개 (H2, H3는 토크 모드로 옮긴 뒤 위치 모드로 다시 띄운다)
 4. 결과 가져오기
 ```
 - 전체 sweep 한 번은 약 10분 걸린다(trial 21개).
@@ -83,14 +84,20 @@ ready()  { ros2 run fr3_husky_task_manager move_to_joint --arm right \
 
 # T3   사용: rec <label>
 rec() { mkdir -p ~/jw_ws/bags && ros2 bag record -o ~/jw_ws/bags/cmdresp_$1_$(date +%m%d_%H%M%S) \
-          /right_fr3/joint_states /right_franka_robot_state_broadcaster/robot_state /policy_joint_command /rosout; }
+          /right_fr3/joint_states /right_franka_robot_state_broadcaster/robot_state /policy_joint_command /rosout \
+          /right_fr3_position_action_controller/policy_position_debug; }
 
 # T4
 probe() { ros2 launch fr3_husky_nn_policy fr3_command_response_probe.launch.py robot:=right launch_controller:=false "$@"; }
 NOTES="notes:=right single arm on new base, EE <hand/판 구성> <질량> kg, collision 100/80 Nm 100 N set <시각>, pose ready j1=0"
 ```
 - `"$NOTES"`는 따옴표째 붙여야 한 인자로 넘어간다.
-- 빌드는 끝나 있다. 다시 빌드할 때만 `cd ~/jw_ws && colcon build --symlink-install --packages-select fr3_husky_controller fr3_husky_nn_policy`를 한다.
+- `policy_position_debug`는 위치 모드에서만 1 kHz로 나온다(bag에서 10분에 약 430 MB). 토크 모드에서는 비어 있다.
+- **11-17 추종기 수정을 pull한 뒤에는 다시 빌드한다.**
+  ```bash
+  cd ~/jw_ws/src/fr3_husky && git pull
+  cd ~/jw_ws && colcon build --symlink-install --packages-select fr3_husky_controller fr3_husky_nn_policy
+  ```
 
 ## 1. 세션 준비
 
@@ -155,7 +162,7 @@ ready
 
 **정지 시험** (A3, B4 공통)
 
-자세마다 T2에서 옮긴 뒤 probe를 다시 띄운다. 세 자세 모두 정면(y = 0)이고 판이 아래를 향한다. 판 끝은 장착면보다 40 cm 이상 위에 있다.
+자세마다 T2에서 옮긴 뒤 probe를 다시 띄운다. 세 자세 모두 정면(y = 0)이고 판이 아래를 향한다. 판 끝은 장착면보다 40 cm 이상 위에 있다. 위치 모드(B4)에서는 자세를 옮길 수 없으므로 3-4의 "B4 자세 옮기기"를 따른다.
 
 | 자세 | T2: 옮기기 | 판 끝 (앞 / 위) |
 |---|---|---|
@@ -171,7 +178,22 @@ probe command_interface:=effort dry_run:=false label:=torque_hold_<자세> tests
 
 ## 3. 위치 모드
 
-위치 모드는 실물에서 처음 쓴다. **B1과 B2를 통과해야 B3로 넘어간다.**
+**B1과 B2를 통과해야 B3로 넘어간다.**
+
+**3-0. 11-17 B3 reflex 뒤 바뀐 것**
+
+11-17 B3(chirp j2)에서 로봇이 0.38 s 동안 명령을 받지 않았다. 그동안 추종기는 혼자 앞서 나갔고, 로봇이 다시 받을 때 명령이 10~25 mrad 튀어 reflex가 났다.
+
+| 항목 | 11-17 | 지금 |
+|---|---|---|
+| 목표 사이 | 새 목표에 가서 멈췄다가 다음 목표를 기다림 | 이전 목표에서 새 목표까지 50 ms 동안 직선으로 잇고, 그 속도도 같이 줌. wp 50 → 20 |
+| 기준 | 추종기 자기 상태 | 매 1 ms 로봇이 실제로 실행한 명령(q_d)에서 다음 명령을 계산. 로봇이 명령을 안 받으면 명령도 같이 멈춰서, 다시 받을 때 튀지 않는다 |
+| reflex가 나면 | 알아채지 못하고 계속 정책을 따라감 | goal이 `robot reflex or control restart (...)`로 끝나고 팔은 그 자리에 멈춘다. 다시 움직이지 않는다(토크 모드도 같음) |
+| 자세 이동 | move_to_joint를 위치 모드에서도 부를 수 있었음(시작 3 ms 만에 reflex) | 위치 모드에서 move_to_joint, JTC는 거부된다. 자세 이동은 토크 모드에서만 한다 |
+| 기록 | 정책 목표(20 Hz)와 로봇 상태만 | 컨트롤러가 1 ms마다 쓴 명령, q_d, 기준점, 로봇 시각 등을 `policy_position_debug`로 발행. T3 `rec`에 들어 있다 |
+
+- 설정은 `fr3_ros_controllers.yaml`의 `right_fr3_position_action_controller` → `policy_position_tracker`에 있다.
+- 11-17 동작으로 되돌리려면 `wp: 50.0`, `interpolate: false`, `sync_to_robot: false`로 바꾸고 T1을 다시 띄운다.
 
 **3-1. T1을 끄고 다시 띄운다**
 ```bash
@@ -179,22 +201,41 @@ ros2 launch fr3_husky_controller fr3_action_controller.launch.py \
   robot_side:=right load_gripper:=false command_interface:=position
 ```
 - 로그에 `Configured and activated right_fr3_position_action_controller`가 나와야 한다.
+- probe가 첫 goal을 보내면(B1부터) T1에 아래 내용의 두 줄이 나와야 한다.
+  ```
+  position tracker wp=20.0/s limit_fraction=0.80 brake_fraction=0.70 reference=linear 50 ms sync_to_robot_q_d=on debug_topic=on
+  robot state monitor (reflex / control restart stops the policy): on
+  ```
+  - 실물에서 `unavailable (sim)`이 나오면 로봇 상태를 못 읽은 것이다. 멈추고 T1 로그에서 `Franka robot state ... not available`을 찾는다.
+- goal이 끝날 때마다 T1에 `q_d sync: N re-syncs, longest run M ms`가 나온다. **0이 정상이다.**
 
 **3-2. T2: 충돌 임계값을 다시 넣는다** (2-2와 같은 명령)
 
-**3-3. T2: `ready`**
+**3-3. 시작 자세: 따로 하지 않는다**
+- 2-4 끝에서 토크 모드로 이미 ready에 와 있다.
+- 위치 모드에서는 `ready`(move_to_joint)가 `Reject: not available on the position command interface`로 거부된다.
 
 **3-4. 시험**
 
 | 순서 | T4 명령 | 시간 | 확인 |
 |---|---|---|---|
 | B0 dry run | `probe command_interface:=position label:=position_dry "$NOTES"` | 몇 초 | A0와 같다 |
-| B1 유지 | `probe command_interface:=position dry_run:=false label:=position_hold tests:="[hold]" hold_duration_s:=10.0 "$NOTES"` | 약 10 s | 시작과 끝에서 튐이나 reflex가 없는지 |
-| B2 작은 계단 | `probe command_interface:=position dry_run:=false label:=position_step_small tests:="[step]" step_amplitudes_rad:="[0.005]" joints:="[4]" "$NOTES"` | 약 7 s | 0.005 rad 계단을 매끄럽게 따라가는지 |
-| B3 전체 sweep | `probe command_interface:=position dry_run:=false label:=position_default "$NOTES"` | 약 10분 | A2와 같은 trial 21개 |
-| B4 정지 | 위 "정지 시험"에서 `command_interface:=position`, `label:=position_hold_<자세>`로 바꾼다 | 자세당 약 10 s | |
+| B1 유지 | `probe command_interface:=position dry_run:=false label:=position_hold tests:="[hold]" hold_duration_s:=10.0 "$NOTES"` | 약 10 s | 시작과 끝에서 튐이나 reflex가 없는지. T1 로그 두 줄(3-1)과 `q_d sync: 0 re-syncs` |
+| B2 작은 계단 | `probe command_interface:=position dry_run:=false label:=position_step_small tests:="[step]" step_amplitudes_rad:="[0.005]" joints:="[4]" "$NOTES"` | 약 7 s | 0.005 rad 계단을 매끄럽게 따라가는지. `q_d sync: 0 re-syncs` |
+| B3 전체 sweep | `probe command_interface:=position dry_run:=false label:=position_default "$NOTES"` | 약 10분 | A2와 같은 trial 21개. 11-17에 멈춘 trial 15(chirp j2)를 지나는지 |
+| B4 정지 | H1: 지금 자세(ready)에서 `probe command_interface:=position dry_run:=false label:=position_hold_H1 tests:="[hold]" "$NOTES"`. H2, H3: 표 아래 "B4 자세 옮기기" | 자세당 약 10 s, H2·H3는 재시작 포함 몇 분 | |
 
 - T1과 T4의 `command_interface`가 다르면 probe가 바로 멈춘다. 두 터미널의 모드를 맞춘다.
+- `q_d sync`가 0이 아니면 [문제 생길 때](#문제-생길-때)를 본다.
+
+**B4 자세 옮기기 (H2, H3)**
+
+위치 모드에서는 자세를 옮길 수 없다. 자세마다 아래를 한다.
+1. T1 Ctrl+C → 2-1 명령(`command_interface:=effort`)으로 다시 띄운다 → 2-2 임계값
+2. T2: 정지 시험 표의 H2(또는 H3) `move_to_joint`
+3. T1 Ctrl+C → 3-1 명령(`command_interface:=position`)으로 다시 띄운다 → 2-2 임계값
+4. T3 `rec position_hold_<자세>`, T4 `probe command_interface:=position dry_run:=false label:=position_hold_<자세> tests:="[hold]" "$NOTES"`, T2 `pstart`
+- 끝나면 1~2를 반복해 토크 모드로 `ready`에 돌아온다.
 
 ## 4. 시간이 남으면
 
@@ -215,6 +256,15 @@ ros2 launch fr3_husky_controller fr3_action_controller.launch.py \
   python scripts/tools/analyze_command_response.py <run>... --plot <dir> --json <file>
   ```
   - 토크 모드와 위치 모드 run을 같이 넣으면 같은 표와 그림으로 비교한다.
+- 위치 모드 bag의 1 kHz 진단 기록은 CSV로 바꿔 본다(lab).
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  python3 scripts/tools/export_position_debug.py <bag 폴더>... --out <dir>
+  ```
+  - goal마다 CSV 하나와 `summary.json`이 나온다.
+  - `q_d frozen`: 로봇이 명령을 실행하지 않은 시간. 0이 정상이다(11-17 B3는 380 ms).
+  - `robot time steps != 1 ms`: 로봇 쪽 통신 끊김. 1 ms가 아닌 큰 값은 자동 복구 재시작이다.
+  - `robot-side |a| max`: 로봇이 보는 명령 가속도. FR3 한계 10 rad/s² 아래여야 한다(추종기는 8까지 씀).
 
 ## 문제 생길 때
 
@@ -227,6 +277,10 @@ ros2 launch fr3_husky_controller fr3_action_controller.launch.py \
 | `... would leave the safe band` (한계 검사 실패) | q0에서 trial 범위가 관절 한계 − 0.02 rad를 넘는다. 자세가 ready인지 본다 |
 | `fr3_policy_control action server is not ready` | T1 컨트롤러가 active가 아니다. T1 로그를 본다 |
 | reflex로 멈춤 | 아래 명령으로 reflex 종류를 본다. Desk EE 설정과 충돌 임계값(2-2)을 다시 확인한다 |
+| T4 `controller ended the goal during the run: success=False, 'robot reflex or control restart (...)'` | reflex 또는 franka_hardware 자동 복구가 났다. 팔은 그 자리에 멈춰 있다. 괄호 안 이유를 적고, 아래 명령으로 reflex 종류를 본다. bag은 5절 `export_position_debug.py`로 본다. 다시 하려면 토크 모드로 `ready`에 돌아간 뒤 3-1부터 한다 |
+| `Reject: not available on the position command interface` | 위치 모드에서 move_to_joint나 JTC를 불렀다. 토크 모드로 다시 띄워 옮긴다(3-4 "B4 자세 옮기기") |
+| T1 경고 `robot q_d has not followed the position command for 50 ms` | 로봇이 명령을 실행하지 않고 있다(11-17 B3 reflex 직전과 같은 상황). 명령은 q_d에 묶여 있어 다시 받아도 튀지 않는다. 시각을 적고, bag을 `export_position_debug.py`로 본다 |
+| `q_d sync: N re-syncs`가 시험 시간(ms)과 비슷하게 큼 | "로봇이 보고하는 q_d = 직전 1 ms 명령"이라는 가정이 틀렸다. 시험을 멈추고, yaml에서 `sync_to_robot: false`로 바꿔 T1을 다시 띄운 뒤 B1부터 한다. bag을 lab PC로 가져온다 |
 
 ```bash
 find ~/.ros/log -maxdepth 1 -name "ros2_control_node_*.log" -newermt "<시작 시각>" -exec grep -Hn "reflex" {} +

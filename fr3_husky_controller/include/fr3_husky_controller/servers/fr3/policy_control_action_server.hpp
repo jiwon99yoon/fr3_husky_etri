@@ -4,12 +4,16 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <Eigen/Core>
+#include <franka/robot_state.h>
 #include <fr3_husky_msgs/action/run_policy_control.hpp>
 #include <fr3_husky_msgs/msg/policy_joint_command.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_buffer.h>
+#include <realtime_tools/realtime_publisher.h>
+#include <std_msgs/msg/float64_multi_array.hpp>
 
 #include <fr3_husky_controller/model/fr3_model_updater.hpp>
 #include <fr3_husky_controller/servers/action_server_base.hpp>
@@ -38,6 +42,13 @@ public:
     static constexpr const char* kTrackerWpParam = "policy_position_tracker.wp";
     static constexpr const char* kTrackerLimitFractionParam = "policy_position_tracker.limit_fraction";
     static constexpr const char* kTrackerBrakeFractionParam = "policy_position_tracker.brake_fraction";
+    // bool: linear segment to each new target over interpolation_period (false: hold target).
+    static constexpr const char* kTrackerInterpolateParam = "policy_position_tracker.interpolate";
+    static constexpr const char* kTrackerInterpolationPeriodParam = "policy_position_tracker.interpolation_period";
+    // bool: re-base the tracker on the robot's executed command q_d (real robot only).
+    static constexpr const char* kTrackerSyncParam = "policy_position_tracker.sync_to_robot";
+    // bool: publish the 1 kHz position diagnostics on ~/policy_position_debug.
+    static constexpr const char* kTrackerDebugParam = "policy_position_tracker.debug_topic";
     bool allowPreemption() const override { return false; }
 
 private:
@@ -70,7 +81,14 @@ private:
     void writeIsaacEffortCommand(double period_s);
     // Position command interface: held policy target -> 1 kHz tracker -> joint position command.
     bool readPositionTrackerParams(std::string& error);
-    void writeTrackedPositionCommand(const Eigen::VectorXd& target);
+    // One 1 kHz cycle: sync to the robot's q_d (if available), step along the reference, write.
+    void writeTrackedPositionCommand();
+    // Robot state monitor (real robot): a robot time jump, a robot mode other than
+    // Move, current errors or a new last_motion_errors means a reflex or a control
+    // restart by the hardware's automatic recovery.  The policy must not resume.
+    bool robotControlInterrupted(std::string& reason);
+    bool readRobotCommandState();
+    void publishPositionDebug(bool resynced);
     // Effort: return result now.  Position: brake the tracker to rest first (a step
     // in the position command would trigger a Franka discontinuity reflex), then return it.
     ComputeResult finishOrBrake(ComputeResult result, double now_s);
@@ -115,12 +133,40 @@ private:
     utils::JointCommandTrackerParams position_tracker_params_{};
     utils::JointCommandTracker position_tracker_;
     bool position_stopping_{false};
+    bool position_sync_{true};
+    bool position_debug_{true};
+    bool position_new_target_{false};
     ComputeResult position_stop_result_{ComputeResult::ABORTED};
     double position_stop_start_s_{0.0};
     Eigen::VectorXd position_stop_target_;
     static constexpr double kPositionStopTimeoutS = 1.0;
     static constexpr double kPositionRestVelocity = 1.0e-3;      // rad/s
     static constexpr double kPositionRestAcceleration = 0.5;     // rad/s^2
+
+    // Real robot state per arm (robot_names_ order); empty / unavailable in MuJoCo.
+    std::vector<const franka::RobotState*> robot_states_;
+    bool robot_state_available_{false};
+    bool robot_time_valid_{false};
+    bool robot_interrupted_{false};
+    std::vector<uint64_t> last_robot_time_ms_;
+    std::vector<bool> motion_error_seen_;
+    Eigen::VectorXd robot_q_d_;
+    Eigen::VectorXd robot_dq_d_;
+    Eigen::VectorXd robot_ddq_d_;
+    uint64_t resync_count_{0};
+    uint64_t resync_run_{0};
+    uint64_t max_resync_run_{0};
+    double cycle_time_s_{0.0};
+    double cycle_period_s_{0.0};
+    uint64_t debug_cycle_{0};
+    std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>> debug_pub_;
+    // A normal cycle advances robot time by 1 ms (2 ms after one missed packet);
+    // the automatic error recovery + control restart takes tens of ms.
+    static constexpr uint64_t kRobotTimeGapMs = 20;
+    // q_d equals the previous command in normal operation; re-sync beyond this.
+    static constexpr double kSyncPositionTolerance = 1.0e-6;  // rad
+    // Consecutive re-syncs = robot not executing the commands; warn after this many cycles.
+    static constexpr uint64_t kFrozenWarnCycles = 50;
 
     std::string result_message_{"not started"};
 

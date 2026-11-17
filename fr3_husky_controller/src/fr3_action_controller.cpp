@@ -1,5 +1,7 @@
 #include "fr3_husky_controller/fr3_action_controller.hpp"
 
+#include <cstring>
+
 namespace fr3_husky_controller 
 {
 controller_interface::InterfaceConfiguration FR3ActionController::state_interface_configuration() const 
@@ -349,6 +351,34 @@ CallbackReturn FR3ActionController::on_activate(const rclcpp_lifecycle::State& /
         {
             LOGW(get_node(), "Franka semantic component state interfaces not available (%s).", e.what());
         }
+
+        // Raw robot state per arm: the "<robot>_fr3/robot_state" interface value is the
+        // bit pattern of a franka::RobotState* owned by the hardware (updated in place by
+        // every read()), the same decoding as franka_semantic_components.  PolicyControl
+        // uses q_d / dq_d / ddq_d (position tracker sync) and robot time / errors (reflex stop).
+        static_assert(sizeof(const franka::RobotState*) == sizeof(double), "pointer must fit a double");
+        std::vector<const franka::RobotState*> robot_states;
+        for (const auto & name : params_.robot_name)
+        {
+            const std::string state_name = name + "_" + arm_id_ + "/robot_state";
+            const franka::RobotState* state = nullptr;
+            for (const auto & iface : state_interfaces_)
+            {
+                if (iface.get_name() == state_name)
+                {
+                    const double value = iface.get_value();
+                    std::memcpy(&state, &value, sizeof(state));
+                    break;
+                }
+            }
+            if (!state)
+            {
+                LOGW(get_node(), "Franka robot state '%s' not available (q_d sync and reflex stop disabled).",
+                     state_name.c_str());
+            }
+            robot_states.push_back(state);
+        }
+        model_updater_->setFrankaRobotStates(std::move(robot_states));
     }
 
     is_halted_ = false;
@@ -369,6 +399,7 @@ controller_interface::CallbackReturn FR3ActionController::on_deactivate(const rc
         if (model_updater_) model_updater_->haltCommands();
         is_halted_ = true;
     }
+    if (model_updater_) model_updater_->setFrankaRobotStates({});  // loaned interfaces are released
 
     return CallbackReturn::SUCCESS;
 }

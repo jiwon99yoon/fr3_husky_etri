@@ -95,6 +95,15 @@ bool JointTrajectoryController::checkTolerance(
 
 bool JointTrajectoryController::acceptGoal(const ActionT::Goal& goal)
 {
+    if (model_updater_.HasPositionCommandInterface() && !model_updater_.HasEffortCommandInterface())
+    {
+        // Position mode: this server starts from the measured position, a step in q_d
+        // that triggers a Franka discontinuity reflex (11-17, 3 ms after the goal).
+        RCLCPP_WARN(node_->get_logger(),
+                    "[%s] Reject: not available on the position command interface; move the arm "
+                    "with the effort controller (command_interface:=effort)", name_.c_str());
+        return false;
+    }
     if (goal.trajectory.points.empty())
     {
         RCLCPP_WARN(node_->get_logger(), "[%s] Reject: trajectory has no points", name_.c_str());

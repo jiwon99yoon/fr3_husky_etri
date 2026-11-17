@@ -35,6 +35,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
     Eigen3
     geometry_msgs
     sensor_msgs
+    std_msgs
     urdf
     dyros_robot_controller
     fr3_husky_msgs
@@ -157,6 +158,7 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
     franka_semantic_components
     geometry_msgs
     sensor_msgs
+    std_msgs
     urdf
     pinocchio
     dyros_robot_controller

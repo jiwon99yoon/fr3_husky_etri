@@ -97,6 +97,15 @@ class ModelUpdaterBase
 
         std::vector<std::unique_ptr<franka_semantic_components::FrankaRobotModel>>*getFrankaRobotModel() { return franka_robot_model_; }
 
+        // Raw libfranka robot state per arm (robot_names_ order), decoded from the
+        // "<robot>_fr3/robot_state" state interface (q_d, dq_d, ddq_d, robot time,
+        // errors).  Real robot only: empty in MuJoCo, then the getter returns nullptr.
+        void setFrankaRobotStates(std::vector<const franka::RobotState*> states) { franka_robot_states_ = std::move(states); }
+        const franka::RobotState* getFrankaRobotState(size_t robot_index) const
+        {
+            return robot_index < franka_robot_states_.size() ? franka_robot_states_[robot_index] : nullptr;
+        }
+
     public:
         std::vector<std::string> robot_names_;
         std::vector<std::string> ee_names_;
@@ -127,6 +136,7 @@ class ModelUpdaterBase
         std::map<std::string, double> halt_position_; // [joint_name][initial pos], for manipulator
 
         std::vector<std::unique_ptr<franka_semantic_components::FrankaRobotModel>>* franka_robot_model_{nullptr};
+        std::vector<const franka::RobotState*> franka_robot_states_;
         RobotHandle robot_handle_;
 
         static constexpr size_t kPositionIndex         = 0;

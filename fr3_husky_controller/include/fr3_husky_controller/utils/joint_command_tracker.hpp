@@ -2,18 +2,29 @@
 
 // 1 kHz joint position command tracker for FR3 position mode.
 //
-// The policy sends a joint target every 50 ms (zero-order hold).  Sending that
-// staircase to the robot would break the FR3 velocity/acceleration/jerk limits
-// (motion abort), so the tracker turns it into a smooth command q_r that
-//   * converges to the held target without overshoot (sqrt braking curve),
-//   * keeps |v| (incl. the position-dependent limit), |a|, |j| below
-//     limit_fraction of the FR3 limits, evaluated on the 1 kHz command sequence.
-// Linear-region delay is 1/wp (wp = 50 -> 20 ms); larger steps are
-// acceleration limited (0.1 rad step: ~113 ms to 50 %).
+// The policy sends a joint target every 50 ms.  The FR3 position interface needs a
+// 1 kHz command whose velocity and acceleration stay continuous and within the
+// FR3 limits (else a discontinuity reflex), so the tracker turns the 20 Hz targets
+// into a smooth command q_r in two stages:
+//   * reference: every new target starts a straight segment from the current
+//     reference point to that target, traversed in interpolation_period (one
+//     policy step, first-order hold).  The segment slope is fed forward as a
+//     velocity, so a steady 20 Hz target stream is followed at nearly constant
+//     speed instead of a start-stop every 50 ms (the position-mode jitter seen on
+//     11-17).  interpolate = false holds each target (zero-order hold, the
+//     original behaviour).
+//   * follower: v* = v_ff + sqrt_controller(reference - q_r) (wp e near zero,
+//     sqrt braking curve further out), a* = 4 wp (v* - v) (critically damped).
+//     |v| (incl. the position-dependent limit), |a| and |jerk| are clamped to
+//     limit_fraction of the FR3 limits on the 1 kHz command sequence.
+//   * sync: syncToRobot() re-bases q_r, v, a on the command the robot reports it
+//     executed (libfranka q_d, dq_d, ddq_d), the same base libfranka limitRate
+//     uses.  If the robot stops accepting commands (q_d frozen for 0.38 s before
+//     the 11-17 B3 reflex), the next command stays one limited step away from q_d
+//     instead of drifting with the policy and jumping when the robot resumes.
 //
 // Reference implementation (must stay identical):
-//   dual_fr3_lab/scripts/tools/analyze_position_tracker.py  tracker_update()
-// and the Isaac Lab position-mode action term uses the same equations.
+//   dual_fr3_lab/scripts/tools/analyze_position_tracker.py  (tracker_update, LinearTargetPath)
 
 #include <algorithm>
 #include <array>
@@ -27,10 +38,12 @@ namespace fr3_husky_controller::utils
 
 struct JointCommandTrackerParams
 {
-    double wp{50.0};              // position gain [1/s]; velocity gain = 4 wp (critically damped)
-    double limit_fraction{0.8};   // fraction of the FR3 v/a/j limits used
-    double brake_fraction{0.7};   // braking deceleration as a fraction of the acceleration limit
-    double dt{0.001};             // command period [s] (the robot differentiates with 1 ms)
+    double wp{20.0};                    // position gain [1/s]; velocity gain = 4 wp (critically damped)
+    double limit_fraction{0.8};         // fraction of the FR3 v/a/j limits used
+    double brake_fraction{0.7};         // braking deceleration as a fraction of the acceleration limit
+    double dt{0.001};                   // command period [s] (the robot differentiates with 1 ms)
+    bool interpolate{true};             // linear segment to each new target (else hold the target)
+    double interpolation_period{0.05};  // segment duration [s] = policy step
 };
 
 class JointCommandTracker
@@ -58,20 +71,68 @@ public:
     void setParams(const JointCommandTrackerParams& params) { params_ = params; }
     const JointCommandTrackerParams& params() const { return params_; }
 
-    // Start at q with zero velocity and acceleration (the robot is at rest).
+    // Start at q with zero velocity and acceleration (the robot is at rest); the
+    // reference holds q until the first target.
     void reset(const Eigen::VectorXd& q)
     {
         q_ = q;
         v_ = Eigen::VectorXd::Zero(q.size());
         a_ = Eigen::VectorXd::Zero(q.size());
+        reference_ = q;
+        feedforward_ = Eigen::VectorXd::Zero(q.size());
+        segment_start_ = q;
+        segment_end_ = q;
+        segment_ticks_ = 0;
+        segment_length_ticks_ = 0;
         velocity_clamped_ = false;
         acceleration_clamped_ = false;
     }
 
-    // One command period towards the held target.  Joint i uses the limits of
-    // FR3 joint (i % 7), so a 14-vector covers both arms.
-    void step(const Eigen::VectorXd& target)
+    // New policy target: a straight segment from the current reference point
+    // (continuous reference even if the target arrives early or late) to target,
+    // or a held target when interpolation is off.
+    void setTarget(const Eigen::VectorXd& target)
     {
+        segment_start_ = segmentPoint();
+        segment_end_ = target;
+        segment_ticks_ = 0;
+        segment_length_ticks_ = params_.interpolate
+            ? std::max<long>(1, std::lround(params_.interpolation_period / params_.dt))
+            : 0;
+    }
+
+    // Hold target without interpolation (braking to rest before a stop).
+    void holdTarget(const Eigen::VectorXd& target)
+    {
+        segment_start_ = target;
+        segment_end_ = target;
+        segment_ticks_ = 0;
+        segment_length_ticks_ = 0;
+    }
+
+    // Re-base the follower on the robot's last executed command (libfranka q_d,
+    // dq_d, ddq_d) when it differs from the tracker by more than position_tol.
+    // In normal operation q_d equals the previous command, so this is a no-op.
+    // Returns true when the state was moved.
+    bool syncToRobot(
+        const Eigen::VectorXd& q_d, const Eigen::VectorXd& dq_d, const Eigen::VectorXd& ddq_d,
+        double position_tol)
+    {
+        if (q_d.size() != q_.size() || (q_ - q_d).cwiseAbs().maxCoeff() <= position_tol)
+        {
+            return false;
+        }
+        q_ = q_d;
+        v_ = dq_d;
+        a_ = ddq_d;
+        return true;
+    }
+
+    // One command period along the reference.  Joint i uses the limits of FR3
+    // joint (i % 7), so a 14-vector covers both arms.
+    void step()
+    {
+        updateReference();
         const double frac = params_.limit_fraction;
         const double wp = params_.wp;
         const double wv = 4.0 * wp;
@@ -85,7 +146,8 @@ public:
         for (Eigen::Index i = 0; i < q_.size(); ++i)
         {
             const std::size_t j = static_cast<std::size_t>(i) % kArmDof;
-            const double v_star = sqrtController(target(i) - q_(i), wp, a_brake);
+            const double v_star =
+                feedforward_(i) + sqrtController(reference_(i) - q_(i), wp, a_brake);
 
             double lo = 0.0;
             double hi = 0.0;
@@ -101,11 +163,15 @@ public:
             velocity_clamped_ = velocity_clamped_ || (v_cl != v_star);
             acceleration_clamped_ = acceleration_clamped_ || (a_cl != a_star);
         }
+        ++segment_ticks_;
     }
 
     const Eigen::VectorXd& position() const { return q_; }
     const Eigen::VectorXd& velocity() const { return v_; }
     const Eigen::VectorXd& acceleration() const { return a_; }
+    // Reference point and feed-forward velocity used by the last step().
+    const Eigen::VectorXd& reference() const { return reference_; }
+    const Eigen::VectorXd& feedforward() const { return feedforward_; }
     bool velocityClamped() const { return velocity_clamped_; }
     bool accelerationClamped() const { return acceleration_clamped_; }
 
@@ -138,6 +204,31 @@ public:
     }
 
 private:
+    // Point of the current segment at segment_ticks_ (the end once traversed).
+    Eigen::VectorXd segmentPoint() const
+    {
+        if (segment_ticks_ >= segment_length_ticks_)
+        {
+            return segment_end_;
+        }
+        const double s = static_cast<double>(segment_ticks_) / static_cast<double>(segment_length_ticks_);
+        return segment_start_ + s * (segment_end_ - segment_start_);
+    }
+
+    void updateReference()
+    {
+        reference_ = segmentPoint();
+        if (segment_ticks_ >= segment_length_ticks_)
+        {
+            feedforward_.setZero();
+        }
+        else
+        {
+            feedforward_ = (segment_end_ - segment_start_) /
+                (static_cast<double>(segment_length_ticks_) * params_.dt);
+        }
+    }
+
     // FR3 position-dependent velocity limits scaled by limit_fraction, capped at
     // limit_fraction * kMaxVelocity.
     void velocityLimits(std::size_t j, double q, double& lo, double& hi) const
@@ -156,6 +247,12 @@ private:
     Eigen::VectorXd q_;
     Eigen::VectorXd v_;
     Eigen::VectorXd a_;
+    Eigen::VectorXd reference_;
+    Eigen::VectorXd feedforward_;
+    Eigen::VectorXd segment_start_;
+    Eigen::VectorXd segment_end_;
+    long segment_ticks_{0};
+    long segment_length_ticks_{0};
     bool velocity_clamped_{false};
     bool acceleration_clamped_{false};
 };
