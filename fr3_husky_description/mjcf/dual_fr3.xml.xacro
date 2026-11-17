@@ -33,7 +33,7 @@
     <xacro:arg name="mobile" default="false"/>
 
     <!-- Attach RealSense D435i to both EEs? -->
-    <xacro:arg name="with_realsense" default="true"/>
+    <xacro:arg name="with_realsense" default="false"/>
 
     <!-- Attach Azure Kinect to mobile base? -->
     <xacro:arg name="with_azure" default="true"/>
@@ -336,6 +336,10 @@
                                         ee2cam_tf="${ee2cam_right_tf}"/>
             </body>
         </xacro:unless>
+        
+        <body name="drawer1" pos="${mobile_base_x + 0.865} 0.1125 0.75" euler="0 0 3.141592">
+            <include file="$(find fr3_husky_description)/mjcf/drawer.xml" />
+        </body>
 
     </worldbody>
 

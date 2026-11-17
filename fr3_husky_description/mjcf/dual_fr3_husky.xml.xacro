@@ -30,7 +30,7 @@
     <xacro:arg name="hand" default="true" />
 
     <!-- Attach RealSense D435i to both EEs? -->
-    <xacro:arg name="with_realsense" default="true"/>
+    <xacro:arg name="with_realsense" default="false"/>
 
     <!-- Attach Azure Kinect to mobile base? -->
     <xacro:arg name="with_azure" default="true"/>
