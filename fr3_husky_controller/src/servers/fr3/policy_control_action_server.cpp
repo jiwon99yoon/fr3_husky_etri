@@ -125,21 +125,80 @@ bool PolicyControl::acceptGoal(const ActionT::Goal& goal)
     }
     if (goal.isaac_relative_control)
     {
-        if (!dual)
+        // Every arm of the active controller must be commanded, otherwise the
+        // other arm would get zero torque (effort) or no target (position).
+        const size_t goal_dof = dual ? 2 * FR3_DOF : FR3_DOF;
+        if (goal_dof != model_updater_.manipulator_dof_)
         {
             RCLCPP_WARN(
-                node_->get_logger(), "[%s] Isaac-relative control is reach-specific and requires robot_name 'dual'",
+                node_->get_logger(),
+                "[%s] Isaac-relative control must command every arm of the active controller "
+                "(robot_name 'dual' for a dual-arm controller)",
                 name_.c_str());
             return false;
         }
-        if (!model_updater_.HasEffortCommandInterface())
+        if (model_updater_.HasEffortCommandInterface())
+        {
+            // Isaac PD torque path (TorqueRateLimitedPDActuator).
+        }
+        else if (model_updater_.HasPositionCommandInterface())
+        {
+            std::string error;
+            if (!readPositionTrackerParams(error))
+            {
+                RCLCPP_WARN(node_->get_logger(), "[%s] %s", name_.c_str(), error.c_str());
+                return false;
+            }
+        }
+        else
         {
             RCLCPP_WARN(
-                node_->get_logger(), "[%s] Isaac-relative control requires an effort command interface",
+                node_->get_logger(),
+                "[%s] Isaac-relative control requires an effort or position command interface",
                 name_.c_str());
             return false;
         }
     }
+    return true;
+}
+
+bool PolicyControl::readPositionTrackerParams(std::string& error)
+{
+    utils::JointCommandTrackerParams params;
+    const auto read = [this](const char* name, double default_value) {
+        if (!node_->has_parameter(name))
+        {
+            node_->declare_parameter(name, default_value);
+        }
+        return node_->get_parameter(name).get_value<double>();
+    };
+    try
+    {
+        params.wp = read(kTrackerWpParam, params.wp);
+        params.limit_fraction = read(kTrackerLimitFractionParam, params.limit_fraction);
+        params.brake_fraction = read(kTrackerBrakeFractionParam, params.brake_fraction);
+    }
+    catch (const std::exception& e)
+    {
+        error = std::string("position tracker parameter error (use float values): ") + e.what();
+        return false;
+    }
+    if (!std::isfinite(params.wp) || params.wp < 5.0 || params.wp > 200.0)
+    {
+        error = "policy_position_tracker.wp must be in [5, 200] 1/s";
+        return false;
+    }
+    if (!std::isfinite(params.limit_fraction) || params.limit_fraction <= 0.0 || params.limit_fraction > 0.95)
+    {
+        error = "policy_position_tracker.limit_fraction must be in (0, 0.95]";
+        return false;
+    }
+    if (!std::isfinite(params.brake_fraction) || params.brake_fraction <= 0.0 || params.brake_fraction > 0.95)
+    {
+        error = "policy_position_tracker.brake_fraction must be in (0, 0.95]";
+        return false;
+    }
+    position_tracker_params_ = params;
     return true;
 }
 
@@ -158,6 +217,9 @@ void PolicyControl::onGoalAccepted(const ActionT::Goal& goal)
     isaac_relative_control_ = goal.isaac_relative_control;
     refresh_isaac_relative_target_ = true;
     control_gripper_ = goal.control_gripper;
+    position_mode_ = isaac_relative_control_ &&
+                     !model_updater_.HasEffortCommandInterface() &&
+                     model_updater_.HasPositionCommandInterface();
 }
 
 void PolicyControl::onStart()
@@ -175,7 +237,31 @@ void PolicyControl::onStart()
     has_command_ = false;
     last_gripper_state_ = -1;
     result_message_ = "running";
+    position_stopping_ = false;
 
+    if (position_mode_)
+    {
+        // Continue from the position the robot is commanded to now (the halt
+        // command), not the measured one: any step in q_d is a reflex.
+        Eigen::VectorXd q_start = fr3_model_updater_.q_total_;
+        if (!fr3_model_updater_.readPositionCommand(q_start))
+        {
+            q_start = fr3_model_updater_.q_total_;
+            RCLCPP_WARN(
+                node_->get_logger(),
+                "[%s] no valid held position command; tracker starts at the measured position",
+                name_.c_str());
+        }
+        position_tracker_.setParams(position_tracker_params_);
+        position_tracker_.reset(q_start);
+        q_hold_ = q_start;
+        q_target_ = q_start;
+        q_desired_ = q_start;
+    }
+
+    const char* mode = !isaac_relative_control_ ? "rate-limited-absolute"
+                       : position_mode_          ? "isaac-position-tracker"
+                                                 : "isaac-pd";
     RCLCPP_INFO(
         node_->get_logger(),
         "[%s] started robot=%s timeout=%.3fs max_duration=%.3fs "
@@ -183,8 +269,15 @@ void PolicyControl::onStart()
         "acceleration_scale=%.2f mode=%s reference=command-selected gripper=%s",
         name_.c_str(), controlled_robot_.c_str(), command_timeout_s_, max_duration_s_,
         max_policy_target_delta_rad_, max_actuator_step_rad_, joint_velocity_scale_,
-        joint_acceleration_scale_, isaac_relative_control_ ? "isaac-pd" : "rate-limited-absolute",
-        control_gripper_ ? "true" : "false");
+        joint_acceleration_scale_, mode, control_gripper_ ? "true" : "false");
+    if (position_mode_)
+    {
+        RCLCPP_INFO(
+            node_->get_logger(),
+            "[%s] position tracker wp=%.1f/s (linear delay %.1f ms) limit_fraction=%.2f brake_fraction=%.2f",
+            name_.c_str(), position_tracker_params_.wp, 1000.0 / position_tracker_params_.wp,
+            position_tracker_params_.limit_fraction, position_tracker_params_.brake_fraction);
+    }
 }
 
 void PolicyControl::commandCallback(
@@ -231,6 +324,12 @@ bool PolicyControl::validateTarget(const CommandData& command, std::string& erro
     if (command.relative_position_offsets && !isaac_relative_control_)
     {
         error = "relative policy command requires Isaac control mode";
+        return false;
+    }
+    if (command.relative_position_offsets && position_mode_)
+    {
+        // measured + offset refreshed every cycle would drift with the tracked position.
+        error = "position command interface needs policy-step absolute targets, not relative offsets";
         return false;
     }
 
@@ -390,6 +489,58 @@ void PolicyControl::writeIsaacEffortCommand(double period_s)
     fr3_model_updater_.writeCommand(fr3_model_updater_.torque_desired_total_);
 }
 
+void PolicyControl::writeTrackedPositionCommand(const Eigen::VectorXd& target)
+{
+    // Fixed 1 ms step: the robot evaluates q_d derivatives per 1 kHz packet, so
+    // a late controller cycle must not enlarge the step.
+    position_tracker_.step(target);
+    q_desired_ = position_tracker_.position();
+    qdot_desired_ = position_tracker_.velocity();
+    fr3_model_updater_.q_desired_total_ = q_desired_;
+    fr3_model_updater_.writeCommand(fr3_model_updater_.q_desired_total_);
+}
+
+PolicyControl::ComputeResult PolicyControl::finishOrBrake(ComputeResult result, double now_s)
+{
+    if (!position_mode_)
+    {
+        return result;
+    }
+    position_stopping_ = true;
+    position_stop_result_ = result;
+    position_stop_start_s_ = now_s;
+    position_stop_target_ = position_tracker_.stoppingTarget();
+    RCLCPP_INFO(
+        node_->get_logger(), "[%s] braking position command to rest before stopping (%s)",
+        name_.c_str(), result_message_.c_str());
+    return continuePositionStop(now_s);
+}
+
+PolicyControl::ComputeResult PolicyControl::continuePositionStop(double now_s)
+{
+    writeTrackedPositionCommand(position_stop_target_);
+    const bool at_rest =
+        position_tracker_.isAtRest(kPositionRestVelocity, kPositionRestAcceleration);
+    if (at_rest || now_s - position_stop_start_s_ >= kPositionStopTimeoutS)
+    {
+        if (!at_rest)
+        {
+            RCLCPP_WARN(
+                node_->get_logger(), "[%s] position brake timeout; max |v| %.4f rad/s",
+                name_.c_str(), position_tracker_.velocity().cwiseAbs().maxCoeff());
+        }
+        return position_stop_result_;
+    }
+    auto feedback = std::make_shared<ActionT::Feedback>();
+    feedback->command_age_s = now_s - last_command_time_s_;
+    feedback->max_joint_error =
+        (q_desired_ - fr3_model_updater_.q_total_).cwiseAbs().maxCoeff();
+    feedback->last_sequence = last_sequence_;
+    feedback->status = "stopping: " + result_message_;
+    publishFeedback(feedback);
+    return ComputeResult::RUNNING;
+}
+
 void PolicyControl::writeDesiredCommand(
     const Eigen::VectorXd& q_desired, const Eigen::VectorXd& qdot_desired)
 {
@@ -425,6 +576,11 @@ PolicyControl::ComputeResult PolicyControl::compute(
     const rclcpp::Time& time, const rclcpp::Duration& period)
 {
     const double now_s = time.seconds();
+    if (position_stopping_)
+    {
+        // Ignore further policy commands while braking to rest.
+        return continuePositionStop(now_s);
+    }
     const CommandData* command = command_buffer_.readFromRT();
 
     if (command && command->received_time_s >= activation_time_s_ &&
@@ -435,7 +591,7 @@ PolicyControl::ComputeResult PolicyControl::compute(
         {
             result_message_ = error;
             RCLCPP_ERROR(node_->get_logger(), "[%s] %s", name_.c_str(), error.c_str());
-            return ComputeResult::ABORTED;
+            return finishOrBrake(ComputeResult::ABORTED, now_s);
         }
 
         const Eigen::Index offset =
@@ -501,26 +657,41 @@ PolicyControl::ComputeResult PolicyControl::compute(
         RCLCPP_ERROR(
             node_->get_logger(), "[%s] %s (age %.3fs)",
             name_.c_str(), result_message_.c_str(), command_age_s);
-        return ComputeResult::ABORTED;
+        return finishOrBrake(ComputeResult::ABORTED, now_s);
     }
 
     if (max_duration_s_ > 0.0 &&
         now_s - activation_time_s_ >= max_duration_s_)
     {
         result_message_ = "maximum policy duration reached";
-        return ComputeResult::SUCCEEDED;
+        return finishOrBrake(ComputeResult::SUCCEEDED, now_s);
     }
 
     if (isaac_relative_control_)
     {
-        // Both reference modes evaluate PD torque and its torque-rate limit on
-        // every controller cycle. Only physics-step mode refreshes the target
-        // from measured_q + held_offset; policy-step mode holds q_desired.
-        if (refresh_isaac_relative_target_)
+        if (model_updater_.HasEffortCommandInterface())
         {
-            refreshIsaacRelativeTarget();
+            // Both reference modes evaluate PD torque and its torque-rate limit on
+            // every controller cycle. Only physics-step mode refreshes the target
+            // from measured_q + held_offset; policy-step mode holds q_desired.
+            if (refresh_isaac_relative_target_)
+            {
+                refreshIsaacRelativeTarget();
+            }
+            writeIsaacEffortCommand(period.seconds());
         }
-        writeIsaacEffortCommand(period.seconds());
+        else if (model_updater_.HasPositionCommandInterface())
+        {
+            // The policy-step target (measured q at the 20 Hz tick + offset) is held
+            // (zero-order hold); the tracker turns it into a limit-respecting q_d.
+            writeTrackedPositionCommand(q_target_);
+        }
+        else
+        {
+            result_message_ = "no supported command interface for Isaac-relative control";
+            RCLCPP_ERROR(node_->get_logger(), "[%s] %s", name_.c_str(), result_message_.c_str());
+            return ComputeResult::ABORTED;
+        }
     }
     else
     {
@@ -547,6 +718,12 @@ PolicyControl::ComputeResult PolicyControl::compute(
     if (!has_command_)
     {
         feedback->status = "waiting for first command";
+    }
+    else if (position_mode_)
+    {
+        feedback->status = position_tracker_.accelerationClamped()
+            ? "tracking-policy-step-position (acceleration limited)"
+            : "tracking-policy-step-position";
     }
     else if (isaac_relative_control_)
     {

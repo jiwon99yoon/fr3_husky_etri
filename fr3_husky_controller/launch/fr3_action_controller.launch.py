@@ -94,6 +94,9 @@ def _controllers_yaml_with_rate(source_path, control_rate_hz):
         'left_fr3_action_controller',
         'right_fr3_action_controller',
         'dual_fr3_action_controller',
+        'left_fr3_position_action_controller',
+        'right_fr3_position_action_controller',
+        'dual_fr3_position_action_controller',
     )
     for controller_name in controller_names:
         parameters = nodes.get(controller_name, {}).get('ros__parameters', {})
@@ -179,6 +182,7 @@ def _launch_setup(context, *args, **kwargs):
     launch_rviz          = LaunchConfiguration('launch_rviz').perform(context)
     launch_move_group    = LaunchConfiguration('launch_move_group').perform(context)
     control_rate_hz      = _positive_integer_launch_argument(context, 'control_rate_hz')
+    command_interface    = LaunchConfiguration('command_interface').perform(context).strip().lower()
     mujoco_armature      = _nonnegative_float_launch_argument(context, 'mujoco_armature')
     mujoco_damping       = _nonnegative_float_launch_argument(context, 'mujoco_damping')
     mujoco_frictionloss  = _nonnegative_float_launch_argument(context, 'mujoco_frictionloss')
@@ -194,6 +198,11 @@ def _launch_setup(context, *args, **kwargs):
         raise RuntimeError("robot_side must be 'left', 'right', or 'dual'.")
     if len(set(robot_sides)) != len(robot_sides):
         raise RuntimeError("robot_side entries must be unique.")
+    if command_interface not in ('effort', 'position'):
+        raise RuntimeError("command_interface must be 'effort' or 'position'.")
+    if command_interface == 'position' and control_rate_hz != 1000:
+        # The policy position tracker and the Franka motion generator assume 1 kHz commands.
+        raise RuntimeError("command_interface:=position requires control_rate_hz:=1000.")
 
     is_dual = len(robot_sides) == 2
 
@@ -284,7 +293,13 @@ def _launch_setup(context, *args, **kwargs):
     rsp_remappings = [('joint_states', joint_states_topic)] if use_mujoco.lower() == 'true' else []
 
     #  Controller / Broadcaster names
-    main_controller = 'dual_fr3_action_controller' if is_dual else f'{robot_sides[0]}_fr3_action_controller'
+    # effort: <side>_fr3_action_controller, position: <side>_fr3_position_action_controller
+    # (fr3_ros_controllers.yaml).  Only one is loaded: both create the same action servers.
+    controller_side = 'dual' if is_dual else robot_sides[0]
+    main_controller = (
+        f'{controller_side}_fr3_action_controller' if command_interface == 'effort'
+        else f'{controller_side}_fr3_position_action_controller'
+    )
     franka_broadcaster_names = (
         ['left_franka_robot_state_broadcaster', 'right_franka_robot_state_broadcaster']
         if is_dual
@@ -538,6 +553,9 @@ def generate_launch_description():
         DeclareLaunchArgument('launch_rviz',         default_value='true',  description='Launch RViz'),
         DeclareLaunchArgument('launch_move_group',   default_value='true', description='Launch move_group (needed for fr3_move_to_joint)'),
         DeclareLaunchArgument('control_rate_hz',      default_value='1000', description='controller_manager and FR3 controller update rate (Hz)'),
+        DeclareLaunchArgument('command_interface',    default_value='effort',
+                              description="FR3 joint command interface of the action controller: effort or position "
+                                          "(position loads <side>_fr3_position_action_controller; requires 1000 Hz)"),
         DeclareLaunchArgument('mujoco_armature',      default_value='0.1', description='MuJoCo FR3 joint armature'),
         DeclareLaunchArgument('mujoco_damping',       default_value='0.003', description='MuJoCo FR3 joint viscous damping'),
         DeclareLaunchArgument('mujoco_frictionloss',  default_value='0.2', description='MuJoCo FR3 joint Coulomb friction loss'),

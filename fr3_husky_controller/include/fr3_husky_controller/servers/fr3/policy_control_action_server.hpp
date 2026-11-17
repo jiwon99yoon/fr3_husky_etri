@@ -13,6 +13,7 @@
 
 #include <fr3_husky_controller/model/fr3_model_updater.hpp>
 #include <fr3_husky_controller/servers/action_server_base.hpp>
+#include <fr3_husky_controller/utils/joint_command_tracker.hpp>
 
 namespace fr3_husky_controller::servers::fr3
 {
@@ -31,6 +32,12 @@ public:
 
     int priority() const override { return 9; }
     bool requiresRobotDataUpdate() const override { return !isaac_relative_control_; }
+
+    // Controller node parameters (optional, read at goal acceptance) for the position
+    // tracker; defaults match the Isaac Lab position-mode action term.
+    static constexpr const char* kTrackerWpParam = "policy_position_tracker.wp";
+    static constexpr const char* kTrackerLimitFractionParam = "policy_position_tracker.limit_fraction";
+    static constexpr const char* kTrackerBrakeFractionParam = "policy_position_tracker.brake_fraction";
     bool allowPreemption() const override { return false; }
 
 private:
@@ -61,6 +68,13 @@ private:
     void refreshIsaacRelativeTarget();
     void writeDesiredCommand(const Eigen::VectorXd& q_desired, const Eigen::VectorXd& qdot_desired);
     void writeIsaacEffortCommand(double period_s);
+    // Position command interface: held policy target -> 1 kHz tracker -> joint position command.
+    bool readPositionTrackerParams(std::string& error);
+    void writeTrackedPositionCommand(const Eigen::VectorXd& target);
+    // Effort: return result now.  Position: brake the tracker to rest first (a step
+    // in the position command would trigger a Franka discontinuity reflex), then return it.
+    ComputeResult finishOrBrake(ComputeResult result, double now_s);
+    ComputeResult continuePositionStop(double now_s);
 
     FR3ModelUpdater& fr3_model_updater_;
     rclcpp::Subscription<fr3_husky_msgs::msg::PolicyJointCommand>::SharedPtr command_sub_;
@@ -95,6 +109,18 @@ private:
     // Matches dual_fr3_lab TorqueRateLimitedPDActuator.  The state is reset
     // at policy start and is used only by the Isaac-relative effort path.
     Eigen::VectorXd previous_applied_effort_;
+
+    // Isaac-relative control on a position command interface (else effort).
+    bool position_mode_{false};
+    utils::JointCommandTrackerParams position_tracker_params_{};
+    utils::JointCommandTracker position_tracker_;
+    bool position_stopping_{false};
+    ComputeResult position_stop_result_{ComputeResult::ABORTED};
+    double position_stop_start_s_{0.0};
+    Eigen::VectorXd position_stop_target_;
+    static constexpr double kPositionStopTimeoutS = 1.0;
+    static constexpr double kPositionRestVelocity = 1.0e-3;      // rad/s
+    static constexpr double kPositionRestAcceleration = 0.5;     // rad/s^2
 
     std::string result_message_{"not started"};
 

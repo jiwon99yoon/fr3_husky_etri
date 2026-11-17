@@ -40,6 +40,13 @@ class FR3ModelUpdater final : public ModelUpdaterBase
         bool getHandlesReady() const override { return !robot_handle_.mani_joints.empty(); }
         void setInitFromCurrent();
         void writeCommand(const Eigen::VectorXd& command);
+        // Last value written to the position command interface, in writeCommand() order.
+        // False (out untouched) unless the position interface is active and every joint
+        // command is finite and within kCommandReadTolerance of the measured position.
+        bool readPositionCommand(Eigen::VectorXd& out);
+        // A held position command farther than this from the measured position is
+        // treated as stale (e.g. never written) and the measured position is used.
+        static constexpr double kCommandReadTolerance = 0.2;  // rad
 
         bool GripperMove(const std::string robot_name, const double width, const double speed = 0.1);
         bool GripperOpen(const std::string robot_name, const double speed = 0.1)  { return GripperMove(robot_name, 0.08, speed); }

@@ -22,6 +22,18 @@
       dual_fr3_action_controller:
         type: fr3_husky_controller/FR3ActionController
 
+      # Same action controller on the joint position command interface (Franka internal
+      # joint impedance tracks q_d).  Load either the effort or the position controller,
+      # not both: both create the same action servers.  Launch: command_interface:=position
+      left_fr3_position_action_controller:
+        type: fr3_husky_controller/FR3ActionController
+
+      right_fr3_position_action_controller:
+        type: fr3_husky_controller/FR3ActionController
+
+      dual_fr3_position_action_controller:
+        type: fr3_husky_controller/FR3ActionController
+
 
       left_test_fr3_controller:
         type: fr3_husky_controller/TestFr3Controller
@@ -166,6 +178,173 @@
         - effort
       manipulator_command_interface: 
         effort
+      dyros_robot_controller:
+        manipulator_joint_gains:
+          kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0,
+               600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
+          kv: [30.0, 30.0, 30.0, 30.0, 10.0, 10.0, 5.0,
+               30.0, 30.0, 30.0, 30.0, 10.0, 10.0, 5.0]
+        task_gains:
+          ik:
+            kp: [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+          id:
+            kp: [600.0, 600.0, 600.0, 1000.0, 1000.0, 1000.0]
+            kv: [20.0, 20.0, 20.0, 30.0, 30.0, 30.0]
+        QPIK_weight:
+          tracking:
+            weights: [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+          joint:
+            velocity:
+              manipulator: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+                            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+            acceleration:
+              manipulator: [0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001,
+                            0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001]
+        QPID_weight:
+          tracking:
+            weights: [10.0, 10.0, 10.0, 40.0, 40.0, 40.0]
+          joint: 
+            velocity:
+              manipulator: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+                            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+            acceleration:
+              manipulator: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
+                            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+
+  left_fr3_position_action_controller:
+    ros__parameters:
+      update_rate: 1000  # Hz
+      robot_name: ["left"]
+      manipulator_joints:
+        - left_fr3_joint1
+        - left_fr3_joint2
+        - left_fr3_joint3
+        - left_fr3_joint4
+        - left_fr3_joint5
+        - left_fr3_joint6
+        - left_fr3_joint7
+      manipulator_state_interfaces:
+        - position
+        - velocity
+        - effort
+      manipulator_command_interface:
+        position
+      # PolicyControl (isaac_relative_control) position path: 20 Hz held target -> 1 kHz
+      # tracker.  Must match the Isaac Lab position-mode action term.  Use floats.
+      policy_position_tracker:
+        wp: 50.0              # 1/s, linear-region delay 1/wp = 20 ms
+        limit_fraction: 0.8   # of the FR3 velocity/acceleration/jerk limits
+        brake_fraction: 0.7   # braking deceleration / acceleration limit
+      dyros_robot_controller:
+        manipulator_joint_gains:
+          kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
+          kv: [30.0, 30.0, 30.0, 30.0, 10.0, 10.0, 5.0]
+        task_gains:
+          ik:
+            kp: [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+          id:
+            kp: [600.0, 600.0, 600.0, 1000.0, 1000.0, 1000.0]
+            kv: [20.0, 20.0, 20.0, 30.0, 30.0, 30.0]
+        QPIK_weight:
+          tracking:
+            weights: [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+          joint:
+            velocity:
+              manipulator: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+            acceleration:
+              manipulator: [0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001]
+        QPID_weight:
+          tracking:
+            weights: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
+          joint:
+            velocity:
+              manipulator: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+            acceleration:
+              manipulator: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+
+  right_fr3_position_action_controller:
+    ros__parameters:
+      update_rate: 1000  # Hz
+      robot_name: ["right"]
+      manipulator_joints:
+        - right_fr3_joint1
+        - right_fr3_joint2
+        - right_fr3_joint3
+        - right_fr3_joint4
+        - right_fr3_joint5
+        - right_fr3_joint6
+        - right_fr3_joint7
+      manipulator_state_interfaces:
+        - position
+        - velocity
+        - effort
+      manipulator_command_interface:
+        position
+      # PolicyControl (isaac_relative_control) position path: 20 Hz held target -> 1 kHz
+      # tracker.  Must match the Isaac Lab position-mode action term.  Use floats.
+      policy_position_tracker:
+        wp: 50.0              # 1/s, linear-region delay 1/wp = 20 ms
+        limit_fraction: 0.8   # of the FR3 velocity/acceleration/jerk limits
+        brake_fraction: 0.7   # braking deceleration / acceleration limit
+      dyros_robot_controller:
+        manipulator_joint_gains:
+          kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
+          kv: [30.0, 30.0, 30.0, 30.0, 10.0, 10.0, 5.0]
+        task_gains:
+          ik:
+            kp: [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+          id:
+            kp: [600.0, 600.0, 600.0, 1000.0, 1000.0, 1000.0]
+            kv: [20.0, 20.0, 20.0, 30.0, 30.0, 30.0]
+        QPIK_weight:
+          tracking:
+            weights: [10.0, 10.0, 10.0, 20.0, 20.0, 20.0]
+          joint:
+            velocity:
+              manipulator: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+                            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+            acceleration:
+              manipulator: [0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001]
+        QPID_weight:
+          tracking:
+            weights: [10.0, 10.0, 10.0, 40.0, 40.0, 40.0]
+          joint: 
+            velocity:
+              manipulator: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+            acceleration:
+              manipulator: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+
+  dual_fr3_position_action_controller:
+    ros__parameters:
+      update_rate: 1000  # Hz
+      robot_name: ["left", "right"]
+      manipulator_joints:
+        - left_fr3_joint1
+        - left_fr3_joint2
+        - left_fr3_joint3
+        - left_fr3_joint4
+        - left_fr3_joint5
+        - left_fr3_joint6
+        - left_fr3_joint7
+        - right_fr3_joint1
+        - right_fr3_joint2
+        - right_fr3_joint3
+        - right_fr3_joint4
+        - right_fr3_joint5
+        - right_fr3_joint6
+        - right_fr3_joint7
+      manipulator_state_interfaces:
+        - position
+        - velocity
+        - effort
+      manipulator_command_interface:
+        position
+      # PolicyControl (isaac_relative_control) position path: 20 Hz held target -> 1 kHz
+      # tracker.  Must match the Isaac Lab position-mode action term.  Use floats.
+      policy_position_tracker:
+        wp: 50.0              # 1/s, linear-region delay 1/wp = 20 ms
+        limit_fraction: 0.8   # of the FR3 velocity/acceleration/jerk limits
+        brake_fraction: 0.7   # braking deceleration / acceleration limit
       dyros_robot_controller:
         manipulator_joint_gains:
           kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0,

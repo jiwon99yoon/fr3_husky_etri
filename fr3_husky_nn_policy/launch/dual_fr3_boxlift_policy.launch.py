@@ -115,6 +115,8 @@ def _launch_setup(context, *args, **kwargs):
             "with_realsense": "false",
             "launch_rviz": LaunchConfiguration("launch_rviz"),
             "launch_move_group": LaunchConfiguration("launch_move_group"),
+            # effort (Isaac PD torque) or position (1 kHz tracker -> Franka joint impedance)
+            "command_interface": LaunchConfiguration("command_interface"),
             **_mujoco_start(context),
         }.items(),
     )
@@ -185,6 +187,8 @@ def generate_launch_description():
                                   description="added to the box position in base before the policy sees it "
                                               "(real robot with /box_tf: [0.0, 0.0, -0.03])"),
             DeclareLaunchArgument("launch_controller", default_value="true"),
+            DeclareLaunchArgument("command_interface", default_value="effort",
+                                  description="effort or position; the policy must be trained for that interface"),
             DeclareLaunchArgument("load_mobile", default_value="true"),
             DeclareLaunchArgument("use_mujoco", default_value="false"),
             DeclareLaunchArgument("use_fake_hardware", default_value="false"),

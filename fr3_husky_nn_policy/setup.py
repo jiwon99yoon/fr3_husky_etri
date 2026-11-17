@@ -41,6 +41,7 @@ setup(
             "boxlift_start_helper = fr3_husky_nn_policy.boxlift_start_helper:main",
             "fr3_consistency_probe_node = fr3_husky_nn_policy.fr3_consistency_probe_node:main",
             "fr3_sysid_node = fr3_husky_nn_policy.fr3_sysid_node:main",
+            "fr3_command_response_probe = fr3_husky_nn_policy.fr3_command_response_probe_node:main",
             "reach_target_cli = fr3_husky_nn_policy.reach_target_cli:main",
             "export_ppo_actor = fr3_husky_nn_policy.export_ppo_actor:main",
             "export_cabinet_book_insert_actor = fr3_husky_nn_policy.export_cabinet_book_insert_actor:main",

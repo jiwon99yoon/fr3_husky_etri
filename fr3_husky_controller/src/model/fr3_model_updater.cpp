@@ -1,5 +1,7 @@
 #include "fr3_husky_controller/model/fr3_model_updater.hpp"
 
+#include <cmath>
+
 namespace fr3_husky_controller
 {
 
@@ -238,6 +240,41 @@ void FR3ModelUpdater::writeCommand(const Eigen::VectorXd& command)
     }
 }
 
+bool FR3ModelUpdater::readPositionCommand(Eigen::VectorXd& out)
+{
+    if (!is_configured_ || !getHandlesReady() || !has_position_command_interface_)
+    {
+        return false;
+    }
+
+    Eigen::VectorXd command = Eigen::VectorXd::Zero(manipulator_dof_);
+    for (size_t i = 0; i < robot_handle_.mani_joints.size(); ++i)
+    {
+        const auto& h = robot_handle_.mani_joints[i];
+        const int joint_idx = jointNameToIndex(h.command.get().get_name());
+        Eigen::Index cmd_idx = static_cast<Eigen::Index>(i);
+        if (joint_idx >= 0)
+        {
+            cmd_idx = num_robots_ > 1
+                ? static_cast<Eigen::Index>(i / FR3_DOF) * static_cast<Eigen::Index>(FR3_DOF) + joint_idx
+                : static_cast<Eigen::Index>(joint_idx);
+        }
+        if (cmd_idx < 0 || cmd_idx >= command.size())
+        {
+            return false;
+        }
+        const double value = h.command.get().get_value();
+        const double measured = h.state[kPositionIndex].get().get_value();
+        if (!std::isfinite(value) || std::abs(value - measured) > kCommandReadTolerance)
+        {
+            return false;
+        }
+        command(cmd_idx) = value;
+    }
+    out = command;
+    return true;
+}
+
 void FR3ModelUpdater::haltCommands()
 {
     if (!getHandlesReady())
@@ -253,7 +290,19 @@ void FR3ModelUpdater::haltCommands()
             const std::string jname = robot_handle_.mani_joints[i].command.get().get_name();
             if(jname.find(arm_id_) != std::string::npos && jname.find("joint") != std::string::npos)
             {
-                halt_position_[jname] = robot_handle_.mani_joints[i].state[kPositionIndex].get().get_value();
+                double hold = robot_handle_.mani_joints[i].state[kPositionIndex].get().get_value();
+                if (has_position_command_interface_)
+                {
+                    // Position mode: keep the last commanded position.  Switching q_d to the
+                    // measured position is a step in the command (velocity/acceleration
+                    // discontinuity reflex), e.g. while an object is squeezed.
+                    const double last_command = robot_handle_.mani_joints[i].command.get().get_value();
+                    if (std::isfinite(last_command) && std::abs(last_command - hold) <= kCommandReadTolerance)
+                    {
+                        hold = last_command;
+                    }
+                }
+                halt_position_[jname] = hold;
             }
             else
             {
