@@ -72,6 +72,10 @@ ppo_boxlift_policy_node:
     #   within position noise + start_position_margin_m, yaw within yaw noise + start_yaw_margin_rad.
     #   ready_tolerance_rad is not used. The table is embedded in the NPZ; move the arms to a row with
     #   MoveIt (start_poses yaml from pregrasp_start_poses.py) before placing the box.
+    # - start_pose hover (-Curriculum checkpoints with manifest start.hover, instead of start.mode): every joint
+    #   within the hover joint noise (0.01 rad) + hover_joint_margin_rad of the fixed hover pose; box x/y/yaw inside
+    #   the trained hover range (x 0.40-0.50, y +-0.10, yaw +-0.1 rad) widened by the two margins above.
+    #   start_pose and hover_joint_margin_rad can be changed while IDLE with ros2 param set.
     # - both: box center z within rest_z_tolerance_m of the trained resting height.
     # Note: sim base height 0.405 m vs real URDF 0.392 m -> a resting box reads ~1.3 cm higher on
     # the real robot than in training.
@@ -79,6 +83,8 @@ ppo_boxlift_policy_node:
     # resting box with a bulged bottom reads z ~ -0.22, so both are widened past the training noise.
     ready_tolerance_rad: 0.20
     pregrasp_joint_margin_rad: 0.02
+    start_pose: manifest  # or hover
+    hover_joint_margin_rad: 0.02
     start_position_margin_m: 0.01
     start_yaw_margin_rad: 0.0
     rest_z_tolerance_m: 0.05

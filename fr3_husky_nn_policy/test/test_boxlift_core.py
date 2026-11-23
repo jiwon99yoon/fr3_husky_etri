@@ -482,3 +482,71 @@ def test_run_logger_accepts_runtime_array_parameters(tmp_path):
     logger = BoxLiftRunLogger(tmp_path, "task", {"parameters": {"goal_xy_offset_m": array.array("d", [0.0, -0.05])}})
     logger.finalize("test")
     assert json.loads(logger.metadata_path.read_text())["parameters"]["goal_xy_offset_m"] == [0.0, -0.05]
+
+
+# ----------------------------------------------------------------------------- start gating (hover, -Curriculum)
+HOVER_Q = np.asarray(DEFAULT_POSE) + 1.0
+
+
+def hover_manifest_dict():
+    raw = pregrasp_manifest_dict()
+    raw["start"]["hover"] = {"joint_position": HOVER_Q.tolist(), "box_x_range_base": [0.40, 0.50],
+                             "box_y_range_base": [-0.10, 0.10], "box_yaw_range_rad": [-0.1, 0.1],
+                             "joint_noise_rad": 0.01}
+    return raw
+
+
+@pytest.fixture
+def hover():
+    return BoxLiftManifest.from_dict(hover_manifest_dict(), {
+        "pregrasp_joint_position": TABLE_Q, "pregrasp_box_pose_base": TABLE_BOX})
+
+
+def test_hover_is_parsed_next_to_the_table(hover, pregrasp):
+    assert hover.start_mode == "pregrasp_table" and np.allclose(hover.hover_joint_position, HOVER_Q)
+    assert hover.hover_box_x_range.tolist() == [0.40, 0.50] and hover.hover_joint_noise == 0.01
+    assert pregrasp.hover_joint_position is None
+
+
+def test_hover_accepts_any_box_in_the_hover_range(hover):
+    q = HOVER_Q + 0.025  # 0.01 noise + 0.02 margin
+    for xy, yaw in (((0.40, -0.10), -0.1), ((0.50, 0.10), 0.1), ((0.45, 0.0), 0.0)):
+        check = check_start_conditions(q, [*xy, -0.25], yaw_quat(yaw), hover, start_pose="hover")
+        assert check.ok and check.table_row is None, check.reasons
+    # the same state is not a table start
+    assert not check_start_conditions(q, [0.45, 0.0, -0.25], yaw_quat(0.0), hover).ok
+
+
+def test_hover_rejects_arms_box_and_height(hover):
+    q = HOVER_Q.copy()
+    q[9] += 0.04
+    check = check_start_conditions(q, [0.52, 0.0, -0.15], yaw_quat(0.2), hover, start_pose="hover")
+    text = " ".join(check.reasons)
+    assert not check.ok and len(check.reasons) == 4
+    assert "0.040 rad from the hover pose (right_fr3_joint3" in text
+    assert "box x=0.520" in text and "box yaw=0.200" in text and "not resting on the floor" in text
+    widened = check_start_conditions(HOVER_Q, [0.505, 0.0, -0.25], yaw_quat(0.0), hover, start_pose="hover",
+                                     start_margin_m=0.01)
+    assert widened.ok
+    assert not check_start_conditions(HOVER_Q + 0.035, [0.45, 0.0, -0.25], yaw_quat(0.0), hover,
+                                      start_pose="hover").ok
+    assert check_start_conditions(HOVER_Q + 0.035, [0.45, 0.0, -0.25], yaw_quat(0.0), hover,
+                                  start_pose="hover", hover_joint_margin_rad=0.03).ok
+
+
+def test_hover_needs_a_hover_manifest(pregrasp):
+    check = check_start_conditions(HOVER_Q, [0.45, 0.0, -0.25], yaw_quat(0.0), pregrasp, start_pose="hover")
+    assert not check.ok and "no hover start" in check.reasons[0]
+    with pytest.raises(ValueError, match="start_pose"):
+        check_start_conditions(HOVER_Q, [0.45, 0.0, -0.25], yaw_quat(0.0), pregrasp, start_pose="table")
+
+
+def test_hover_rejects_bad_manifest():
+    raw = hover_manifest_dict()
+    raw["start"]["hover"]["joint_position"] = HOVER_Q[:7].tolist()
+    with pytest.raises(ValueError, match="14 finite joint positions"):
+        BoxLiftManifest.from_dict(raw, {"pregrasp_joint_position": TABLE_Q, "pregrasp_box_pose_base": TABLE_BOX})
+    raw = hover_manifest_dict()
+    raw["start"]["hover"]["box_x_range_base"] = [0.5, 0.4]
+    with pytest.raises(ValueError, match="box_x_range_base"):
+        BoxLiftManifest.from_dict(raw, {"pregrasp_joint_position": TABLE_Q, "pregrasp_box_pose_base": TABLE_BOX})

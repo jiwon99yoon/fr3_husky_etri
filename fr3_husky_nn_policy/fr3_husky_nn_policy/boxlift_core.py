@@ -30,6 +30,11 @@ from .observation import DUAL_ARM_JOINT_NAMES
 MANIFEST_SCHEMA = "dual_fr3_boxlift_manifest/1"
 START_READY_POSE = "ready_pose"
 START_PREGRASP_TABLE = "pregrasp_table"
+# Which start the robot uses (node parameter start_pose): "manifest" = the checkpoint's start.mode (ready pose or
+# pre-grasp table row), "hover" = the fixed hover pose of -Curriculum runs (manifest start.hover)
+START_POSE_MANIFEST = "manifest"
+START_HOVER = "hover"
+START_POSES = (START_POSE_MANIFEST, START_HOVER)
 # (term name, Isaac observation function, size), in policy input order
 OBS_TERMS = (
     ("joint_pos", "joint_pos_rel", 14),
@@ -208,6 +213,14 @@ class BoxLiftManifest:
     start_joint_noise: float = 0.0                     # uniform +/- training reset noise
     start_box_pos_noise: float = 0.0
     start_box_yaw_noise: float = 0.0
+    # Optional fixed hover start (manifest start.hover, -Curriculum runs): arms at one fixed pose with the plates
+    # about 0.25 m above the grasp height (+/- joint noise), box resting anywhere in the hover x/y/yaw range.
+    # The robot picks it with start_pose "hover" instead of the start.mode start.
+    hover_joint_position: np.ndarray | None = None     # (14,) manifest joint order
+    hover_box_x_range: np.ndarray | None = None        # (2,) base frame
+    hover_box_y_range: np.ndarray | None = None
+    hover_box_yaw_range: np.ndarray | None = None      # (2,) rad
+    hover_joint_noise: float = 0.0
     # Goal x/y = box start x/y + offset; per-axis (low, high) offset range sampled in training
     # (manifest goal.xy_offset_range_base). Exports without it trained a pure vertical lift: (0, 0).
     goal_xy_offset_range: np.ndarray = field(default_factory=lambda: np.zeros((2, 2)))
@@ -303,6 +316,26 @@ def _parse_start(start: Mapping, arrays: Mapping[str, np.ndarray] | None) -> dic
         "start_joint_noise": noise["joint_noise_rad"],
         "start_box_pos_noise": noise["box_pos_noise_m"],
         "start_box_yaw_noise": noise["box_yaw_noise_rad"],
+        **_parse_hover(start.get("hover")),
+    }
+
+
+def _parse_hover(hover: Mapping | None) -> dict:
+    """manifest start.hover (written by export_boxlift_actor.py for -Curriculum runs) -> hover_* fields."""
+    if not hover:
+        return {}
+    joint_position = np.asarray(hover["joint_position"], dtype=np.float64)
+    if joint_position.shape != (ACTION_DIM,) or not np.all(np.isfinite(joint_position)):
+        raise ValueError(f"hover start needs 14 finite joint positions, got shape {joint_position.shape}")
+    noise = float(hover["joint_noise_rad"])
+    if not np.isfinite(noise) or noise < 0.0:
+        raise ValueError(f"hover joint noise must be finite and non-negative, got {noise}")
+    return {
+        "hover_joint_position": joint_position,
+        "hover_box_x_range": _pair(hover["box_x_range_base"], "start.hover.box_x_range_base"),
+        "hover_box_y_range": _pair(hover["box_y_range_base"], "start.hover.box_y_range_base"),
+        "hover_box_yaw_range": _pair(hover["box_yaw_range_rad"], "start.hover.box_yaw_range_rad"),
+        "hover_joint_noise": noise,
     }
 
 
@@ -511,8 +544,13 @@ def _wrap_angle(angle):
 def check_start_conditions(joint_position, box_position_b, box_quat_b, manifest: BoxLiftManifest, *,
                            ready_tolerance_rad: float = 0.20, start_margin_m: float = 0.0,
                            yaw_margin_rad: float = 0.0, rest_z_tolerance_m: float = 0.03,
-                           pregrasp_joint_margin_rad: float = 0.02) -> StartCheck:
+                           pregrasp_joint_margin_rad: float = 0.02, start_pose: str = START_POSE_MANIFEST,
+                           hover_joint_margin_rad: float = 0.02) -> StartCheck:
     """Check that the robot and box are inside the start distribution the checkpoint trained on.
+
+    ``start_pose`` "manifest" checks the checkpoint's ``start.mode`` (below); "hover" checks the fixed hover start
+    of -Curriculum runs instead: arms within ``hover joint noise + hover_joint_margin_rad`` of the hover pose on
+    every joint, box x/y/yaw inside the trained hover range widened by ``start_margin_m`` / ``yaw_margin_rad``.
 
     ``ready_pose`` start: arms within ``ready_tolerance_rad`` of the default pose, box x/y/yaw inside the
     trained start range widened by ``start_margin_m`` / ``yaw_margin_rad``.
@@ -529,8 +567,28 @@ def check_start_conditions(joint_position, box_position_b, box_quat_b, manifest:
     x, y, z = np.asarray(box_position_b, dtype=np.float64)
     yaw = float(yaw_from_quat(canonicalize_box_quat(box_quat_b)))
     table_row = None
+    if start_pose not in START_POSES:
+        raise ValueError(f"start_pose must be one of {START_POSES}, got {start_pose!r}")
 
-    if manifest.start_mode == START_PREGRASP_TABLE:
+    if start_pose == START_HOVER:
+        if manifest.hover_joint_position is None:
+            reasons.append("this checkpoint has no hover start (manifest start.hover); use start_pose 'manifest'")
+        else:
+            joint_tolerance = manifest.hover_joint_noise + hover_joint_margin_rad
+            joint_error = np.abs(joint_position - manifest.hover_joint_position)
+            worst = int(np.argmax(joint_error))
+            if joint_error[worst] > joint_tolerance:
+                reasons.append(f"arms are {joint_error[worst]:.3f} rad from the hover pose "
+                               f"({manifest.joint_names[worst]}, allowed {joint_tolerance:.3f})")
+            for axis, value, (low, high) in (("x", x, manifest.hover_box_x_range),
+                                             ("y", y, manifest.hover_box_y_range)):
+                if not (low - start_margin_m <= value <= high + start_margin_m):
+                    reasons.append(f"box {axis}={value:.3f} m outside the trained hover start range "
+                                   f"[{low:.3f}, {high:.3f}] (+/- {start_margin_m:.3f})")
+            low, high = manifest.hover_box_yaw_range
+            if not (low - yaw_margin_rad <= yaw <= high + yaw_margin_rad):
+                reasons.append(f"box yaw={yaw:.3f} rad outside the trained hover start range [{low:.3f}, {high:.3f}]")
+    elif manifest.start_mode == START_PREGRASP_TABLE:
         table_q, table_box = manifest.pregrasp_joint_position, manifest.pregrasp_box_pose
         joint_tolerance = manifest.start_joint_noise + pregrasp_joint_margin_rad
         position_tolerance = manifest.start_box_pos_noise + start_margin_m

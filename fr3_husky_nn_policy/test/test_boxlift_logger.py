@@ -40,3 +40,19 @@ def test_logger_rejects_wrong_sizes(tmp_path):
     with pytest.raises(ValueError, match="missing timing"):
         logger.append({}, np.zeros(56), np.zeros(14), np.zeros(14), [0, 0, 0, 1])
     logger.finalize("test")
+
+
+def test_append_session_result_never_misaligns_columns(tmp_path):
+    import csv
+    from fr3_husky_nn_policy.boxlift_logger import append_session_result
+
+    path = tmp_path / "results.csv"
+    assert append_session_result(path, {"session": "a", "model": "m"}) == path
+    assert append_session_result(path, {"session": "b", "model": "m"}) == path
+    other = append_session_result(path, {"session": "c", "model": "m", "start_pose": "hover"})
+    assert other != path and other.parent == path.parent
+    assert append_session_result(path, {"session": "d", "model": "m", "start_pose": "hover"}) == other
+    with path.open() as handle:
+        assert [r["session"] for r in csv.DictReader(handle)] == ["a", "b"]
+    with other.open() as handle:
+        assert [(r["session"], r["start_pose"]) for r in csv.DictReader(handle)] == [("c", "hover"), ("d", "hover")]

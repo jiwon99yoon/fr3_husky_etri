@@ -17,6 +17,11 @@ Examples::
     # (box410 model_2999: A 1919, B 3788, C 3925, D 720, E 2228 with the default box_size_m)
     ros2 launch fr3_husky_nn_policy dual_fr3_boxlift_policy.launch.py model_path:=... \
         box_size_m:="[0.310, 0.410, 0.280]" use_mujoco:=true mujoco_start_row:=1965
+
+    # hover start (-Curriculum checkpoints, manifest start.hover): arms at the fixed hover pose, box anywhere in the
+    # trained hover range. MuJoCo puts the box at mujoco_hover_box (x, y in base [m], yaw [deg])
+    ros2 launch fr3_husky_nn_policy dual_fr3_boxlift_policy.launch.py model_path:=... \
+        box_size_m:="[0.310, 0.410, 0.280]" start_pose:=hover use_mujoco:=true mujoco_hover_box:="[0.45, 0.0, 0.0]"
 """
 
 import json
@@ -35,21 +40,36 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def _mujoco_start(context):
-    """Controller launch arguments that place the arms and the box at one pre-grasp table row."""
+    """Controller launch arguments that place the arms and the box at one pre-grasp table row (or the hover start)."""
     if LaunchConfiguration("use_mujoco").perform(context).lower() != "true":
         return {}
-    row = int(LaunchConfiguration("mujoco_start_row").perform(context))
     model_path = LaunchConfiguration("model_path").perform(context)
-    with np.load(model_path, allow_pickle=False) as archive:
-        if "pregrasp_joint_position" not in archive.files:
-            raise RuntimeError(f"{model_path} has no pre-grasp table; mujoco_start_row needs a -Pregrasp policy")
-        table_q = archive["pregrasp_joint_position"]
-        table_box = archive["pregrasp_box_pose_base"]
-    if not 0 <= row < len(table_q):
-        raise RuntimeError(f"mujoco_start_row {row} is outside the pre-grasp table (0..{len(table_q) - 1})")
-    x, y = table_box[row, 0], table_box[row, 1]
-    qz, qw = table_box[row, 5], table_box[row, 6]  # (x, y, z, w), yaw-only box orientation
-    yaw = 2.0 * math.atan2(qz, qw)
+    if LaunchConfiguration("start_pose").perform(context) == "hover":
+        with np.load(model_path, allow_pickle=False) as archive:
+            hover = json.loads(str(archive["manifest_json"].item())).get("start", {}).get("hover")
+        if hover is None:
+            raise RuntimeError(f"{model_path} has no hover start (manifest start.hover); start_pose:=hover needs a "
+                               "-Curriculum policy")
+        box = yaml.safe_load(LaunchConfiguration("mujoco_hover_box").perform(context))
+        if len(box) != 3:
+            raise RuntimeError(f"mujoco_hover_box must be [x, y, yaw_deg], got {box!r}")
+        start_q = np.asarray(hover["joint_position"], dtype=np.float64)
+        x, y, yaw = float(box[0]), float(box[1]), math.radians(float(box[2]))
+        start_label = "hover pose"
+    else:
+        row = int(LaunchConfiguration("mujoco_start_row").perform(context))
+        with np.load(model_path, allow_pickle=False) as archive:
+            if "pregrasp_joint_position" not in archive.files:
+                raise RuntimeError(f"{model_path} has no pre-grasp table; mujoco_start_row needs a -Pregrasp policy")
+            table_q = archive["pregrasp_joint_position"]
+            table_box = archive["pregrasp_box_pose_base"]
+        if not 0 <= row < len(table_q):
+            raise RuntimeError(f"mujoco_start_row {row} is outside the pre-grasp table (0..{len(table_q) - 1})")
+        start_q = table_q[row]
+        x, y = table_box[row, 0], table_box[row, 1]
+        qz, qw = table_box[row, 5], table_box[row, 6]  # (x, y, z, w), yaw-only box orientation
+        yaw = 2.0 * math.atan2(qz, qw)
+        start_label = f"table row {row}"
     friction = float(LaunchConfiguration("mujoco_box_friction").perform(context))
     # The MuJoCo box is the physical box the node is told about (and checks against the policy).
     size = yaml.safe_load(LaunchConfiguration("box_size_m").perform(context))
@@ -78,11 +98,11 @@ def _mujoco_start(context):
         f" cone:={LaunchConfiguration('mujoco_cone').perform(context)}"
         f" impratio:={LaunchConfiguration('mujoco_impratio').perform(context)}"
     )
-    print(f"[dual_fr3_boxlift] MuJoCo start: table row {row}, box ({x:.4f}, {y:.4f}, yaw {math.degrees(yaw):.2f} deg), "
+    print(f"[dual_fr3_boxlift] MuJoCo start: {start_label}, box ({x:.4f}, {y:.4f}, yaw {math.degrees(yaw):.2f} deg), "
           f"size {size}")
     return {
         "mujoco_scene_extra_args": scene_args,
-        "mujoco_initial_joint_positions": " ".join(f"{q:.6f}" for q in table_q[row]),
+        "mujoco_initial_joint_positions": " ".join(f"{q:.6f}" for q in start_q),
         "mujoco_object_pose_body": "box",
         # With the vision stand-in, MuJoCo's exact pose goes to /box_pose_gt and only the noisy copy
         # reaches the policy on box_pose_topic.
@@ -134,15 +154,17 @@ def _launch_setup(context, *args, **kwargs):
                 "goal_z_m": ParameterValue(LaunchConfiguration("goal_z_m"), value_type=float),
                 "goal_xy_offset_m": ParameterValue(LaunchConfiguration("goal_xy_offset_m"), value_type=list[float]),
                 "goal_xy_reference": LaunchConfiguration("goal_xy_reference"),
+                "start_pose": LaunchConfiguration("start_pose"),
                 "box_size_m": ParameterValue(LaunchConfiguration("box_size_m"), value_type=list[float]),
                 "box_pose_topic": LaunchConfiguration("box_pose_topic"),
                 "box_position_offset_m": ParameterValue(LaunchConfiguration("box_position_offset_m"),
                                                         value_type=list[float]),
+                # log_task_name:="" -> dual_fr3_boxlift (MuJoCo) / dual_fr3_boxlift_real (robot)
                 "log_task_name": PythonExpression(
                     [
-                        "'dual_fr3_boxlift' if '",
+                        "'", LaunchConfiguration("log_task_name"), "' or ('dual_fr3_boxlift' if '",
                         LaunchConfiguration("use_mujoco"),
-                        "'.lower() == 'true' else 'dual_fr3_boxlift_real'",
+                        "'.lower() == 'true' else 'dual_fr3_boxlift_real')",
                     ]
                 ),
             },
@@ -180,6 +202,12 @@ def generate_launch_description():
             DeclareLaunchArgument("goal_xy_reference", default_value="box_start",
                                   description="what goal_xy_offset_m is added to: box_start (box x/y at start_policy) "
                                               "or range_center (center of the trained goal.xy_range_base)"),
+            DeclareLaunchArgument("start_pose", default_value="manifest",
+                                  description="manifest (the checkpoint's start.mode: ready pose or pre-grasp table row) "
+                                              "or hover (fixed hover pose of -Curriculum checkpoints)"),
+            DeclareLaunchArgument("log_task_name", default_value="",
+                                  description="data/<name>/<session> logs and experi_result/<name>/results.csv; "
+                                              "empty: dual_fr3_boxlift (MuJoCo) or dual_fr3_boxlift_real"),
             DeclareLaunchArgument("box_size_m", default_value="[0.410, 0.310, 0.280]",
                                   description="physical box (x, y squeezed, z) in base; must match the policy's box"),
             DeclareLaunchArgument("box_pose_topic", default_value="/box_pose"),
@@ -197,6 +225,8 @@ def generate_launch_description():
             # MuJoCo only (use_mujoco:=true)
             DeclareLaunchArgument("mujoco_start_row", default_value="1919",
                                   description="pre-grasp table row for the arm and box start (model_2999: A 1919)"),
+            DeclareLaunchArgument("mujoco_hover_box", default_value="[0.45, 0.0, 0.0]",
+                                  description="start_pose:=hover only: MuJoCo box start [x, y (base, m), yaw (deg)]"),
             DeclareLaunchArgument("mujoco_mount_z", default_value="0.2727",
                                   description="arm mount above Husky base_link; 0.2727 = 0.405 m above the floor "
                                               "as in training, 0.26 = current URDF/MJCF (0.392 m)"),

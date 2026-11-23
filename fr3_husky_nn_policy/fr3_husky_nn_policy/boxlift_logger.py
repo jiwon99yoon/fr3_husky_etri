@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import array
 import csv
+import hashlib
 import json
 import re
 from datetime import datetime
@@ -50,9 +51,18 @@ FIELDNAMES = (
 
 
 def append_session_result(path: Path, row: Mapping[str, Any]) -> Path:
-    """Append one session summary row to a CSV kept across runs (header written when the file is new)."""
+    """Append one session summary row to a CSV kept across runs (header written when the file is new).
+
+    If the file already has other columns (an older node version), the row goes to ``<stem>_<column hash>.csv``
+    next to it instead of being appended under a header it does not match.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.stat().st_size > 0 and _csv_header(path) != list(row):
+        digest = hashlib.sha1(",".join(row).encode("utf-8")).hexdigest()[:8]
+        path = path.with_name(f"{path.stem}_{digest}{path.suffix}")
+        if path.exists() and path.stat().st_size > 0 and _csv_header(path) != list(row):
+            raise ValueError(f"{path} has other columns than this result row")
     new = not path.exists() or path.stat().st_size == 0
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(row))
@@ -60,6 +70,11 @@ def append_session_result(path: Path, row: Mapping[str, Any]) -> Path:
             writer.writeheader()
         writer.writerow(row)
     return path
+
+
+def _csv_header(path: Path) -> list[str]:
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        return next(csv.reader(handle), [])
 
 
 class BoxLiftRunLogger:

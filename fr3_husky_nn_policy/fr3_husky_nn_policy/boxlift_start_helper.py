@@ -1,4 +1,4 @@
-"""Pick the pre-grasp start row for wherever the box is, and preview the node's start check.
+"""Pick the pre-grasp start row for wherever the box is (or the hover pose), and preview the node's start check.
 
 Run it next to a running ppo_boxlift_policy_node (real robot or MuJoCo)::
 
@@ -12,6 +12,12 @@ Run it next to a running ppo_boxlift_policy_node (real robot or MuJoCo)::
    the arms, then put it back on the same spot.
 3. With the arms anywhere, runs the node's own start check (``boxlift_core.check_start_conditions`` with
    the node's margins) on the current joints and box, i.e. what ``start_policy`` would answer now.
+
+With the node's ``start_pose`` = ``hover`` (-Curriculum checkpoints) there is no row to pick: it checks the box
+against the trained hover range and prints (``--move``: sends) the ``move_to_joint`` command for the hover pose.
+MoveIt does not know the box either: move the arms with the box out of the way, then slide the box in from the front.
+At the hover pose the plate centers hang 16 cm above the box top, 0.32 m left/right of the base x axis (a box at
+y +-0.10 leaves only ~1.5 cm sideways, so keep it low while sliding it in).
 
 Model path, box size and margins are read from the running node; ``--node`` picks another node name.
 """
@@ -45,7 +51,7 @@ PARAMETERS = (
     "model_path", "box_size_m", "box_size_tolerance_m", "box_pose_topic", "box_position_offset_m",
     "joint_states_topic", "base_frame", "ready_tolerance_rad", "start_position_margin_m",
     "start_yaw_margin_rad", "rest_z_tolerance_m", "pregrasp_joint_margin_rad", "shadow_mode",
-    "goal_z_m", "goal_xy_offset_m", "goal_xy_reference",
+    "goal_z_m", "goal_xy_offset_m", "goal_xy_reference", "start_pose", "hover_joint_margin_rad",
 )
 
 
@@ -78,7 +84,12 @@ def main(argv=None) -> int:
     try:
         p = _node_parameters(node, args.node)
         _, manifest = load_boxlift_policy(p["model_path"], p["box_size_m"], p["box_size_tolerance_m"])
-        if manifest.pregrasp_joint_position is None:
+        start_pose = p["start_pose"] or "manifest"  # None: node from before the start_pose parameter
+        hover = start_pose == "hover"
+        if hover and manifest.hover_joint_position is None:
+            print("node start_pose is hover but this checkpoint has no hover start (manifest start.hover)")
+            return 1
+        if not hover and manifest.pregrasp_joint_position is None:
             print("this checkpoint has no pre-grasp table (start.mode ready_pose); use the ready pose")
             return 1
         offset = np.asarray(p["box_position_offset_m"], dtype=np.float64)
@@ -131,23 +142,35 @@ def main(argv=None) -> int:
             print("        WARNING: below the 20 Hz policy rate; the node faults after "
                   "box_pose_timeout_s without a pose")
 
-        table_q, table_box = manifest.pregrasp_joint_position, manifest.pregrasp_box_pose
-        position_tolerance = manifest.start_box_pos_noise + p["start_position_margin_m"]
-        yaw_tolerance = manifest.start_box_yaw_noise + p["start_yaw_margin_rad"]
-        table_yaw = yaw_from_quat(canonicalize_box_quat(table_box[:, 3:7]))
-        position_error = np.max(np.abs(table_box[:, :2] - position[:2]), axis=1)
-        yaw_error = np.abs((table_yaw - yaw + np.pi) % (2.0 * np.pi) - np.pi)
-        score = np.maximum(position_error / position_tolerance, yaw_error / yaw_tolerance)
-        row = int(np.argmin(score))
-        print(f"row     {row}: box x {table_box[row, 0]:.3f}  y {table_box[row, 1]:+.3f}  yaw "
-              f"{math.degrees(table_yaw[row]):+.1f} deg -> off {100 * position_error[row]:.1f} cm "
-              f"(allowed {100 * position_tolerance:.1f}), {math.degrees(yaw_error[row]):.1f} deg "
-              f"(allowed {math.degrees(yaw_tolerance):.1f})")
-        if score[row] > 1.0:
-            print("        WARNING: no table row matches this box; move the box into the trained range "
-                  f"x {table_box[:, 0].min():.2f}..{table_box[:, 0].max():.2f}, "
-                  f"y {table_box[:, 1].min():+.2f}..{table_box[:, 1].max():+.2f}")
-        q = table_q[row]
+        if hover:
+            row = "hover"
+            q = manifest.hover_joint_position
+            margin, yaw_margin = p["start_position_margin_m"], p["start_yaw_margin_rad"]
+            (x0, x1), (y0, y1) = manifest.hover_box_x_range, manifest.hover_box_y_range
+            w0, w1 = manifest.hover_box_yaw_range
+            inside = (x0 - margin <= position[0] <= x1 + margin and y0 - margin <= position[1] <= y1 + margin
+                      and w0 - yaw_margin <= yaw <= w1 + yaw_margin)
+            print(f"hover   trained box range x {x0:.2f}..{x1:.2f}  y {y0:+.2f}..{y1:+.2f} (+/- {margin:.2f})  "
+                  f"yaw {math.degrees(w0):+.1f}..{math.degrees(w1):+.1f} deg -> "
+                  + ("inside" if inside else "OUTSIDE: move the box"))
+        else:
+            table_q, table_box = manifest.pregrasp_joint_position, manifest.pregrasp_box_pose
+            position_tolerance = manifest.start_box_pos_noise + p["start_position_margin_m"]
+            yaw_tolerance = manifest.start_box_yaw_noise + p["start_yaw_margin_rad"]
+            table_yaw = yaw_from_quat(canonicalize_box_quat(table_box[:, 3:7]))
+            position_error = np.max(np.abs(table_box[:, :2] - position[:2]), axis=1)
+            yaw_error = np.abs((table_yaw - yaw + np.pi) % (2.0 * np.pi) - np.pi)
+            score = np.maximum(position_error / position_tolerance, yaw_error / yaw_tolerance)
+            row = int(np.argmin(score))
+            print(f"row     {row}: box x {table_box[row, 0]:.3f}  y {table_box[row, 1]:+.3f}  yaw "
+                  f"{math.degrees(table_yaw[row]):+.1f} deg -> off {100 * position_error[row]:.1f} cm "
+                  f"(allowed {100 * position_tolerance:.1f}), {math.degrees(yaw_error[row]):.1f} deg "
+                  f"(allowed {math.degrees(yaw_tolerance):.1f})")
+            if score[row] > 1.0:
+                print("        WARNING: no table row matches this box; move the box into the trained range "
+                      f"x {table_box[:, 0].min():.2f}..{table_box[:, 0].max():.2f}, "
+                      f"y {table_box[:, 1].min():+.2f}..{table_box[:, 1].max():+.2f}")
+            q = table_q[row]
         command = ["ros2", "run", "fr3_husky_task_manager", "move_to_joint",
                    "--left-target-positions", *[f"{v:.4f}" for v in q[:7]],
                    "--right-target-positions", *[f"{v:.4f}" for v in q[7:]]]
@@ -160,22 +183,27 @@ def main(argv=None) -> int:
                 print(f"start   joint states lack {missing}")
             else:
                 current = np.array([positions[n] for n in manifest.joint_names])
-                print(f"        arms are {np.max(np.abs(current - q)):.3f} rad from row {row}")
+                print(f"        arms are {np.max(np.abs(current - q)):.3f} rad from " + (
+                    "the hover pose" if hover else f"row {row}"))
                 start = check_start_conditions(
                     current, position, quat, manifest,
                     ready_tolerance_rad=p["ready_tolerance_rad"], start_margin_m=p["start_position_margin_m"],
                     yaw_margin_rad=p["start_yaw_margin_rad"], rest_z_tolerance_m=p["rest_z_tolerance_m"],
-                    pregrasp_joint_margin_rad=p["pregrasp_joint_margin_rad"],
+                    pregrasp_joint_margin_rad=p["pregrasp_joint_margin_rad"], start_pose=start_pose,
+                    hover_joint_margin_rad=p["hover_joint_margin_rad"] if p["hover_joint_margin_rad"] is not None
+                    else 0.02,
                 )
                 if start.ok:
-                    print(f"start   PASS now (row {start.table_row}): start_policy would be accepted")
+                    where = "hover" if hover else f"row {start.table_row}"
+                    print(f"start   PASS now ({where}): start_policy would be accepted")
                 else:
                     print("start   FAIL now: " + "; ".join(start.reasons))
         else:
             print(f"start   no joint states on {p['joint_states_topic']}")
 
         if args.move:
-            answer = input("Box OUT of the way and area clear? Send the arms to this row [y/N] ")
+            answer = input("Box OUT of the way and area clear? Send the arms to the hover pose [y/N] " if hover else
+                           "Box OUT of the way and area clear? Send the arms to this row [y/N] ")
             if answer.strip().lower() == "y":
                 return subprocess.call(command)
             print("not moved")

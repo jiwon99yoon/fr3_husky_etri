@@ -17,6 +17,8 @@ a checkpoint trained for another box.
 start_policy is refused unless the arms and the box are inside the start distribution the checkpoint
 trained on: the ready pose for ``start.mode=ready_pose``, or one row of the pre-grasp table embedded in
 the NPZ for ``start.mode=pregrasp_table`` (move the arms there with MoveIt first, then place the box).
+``start_pose:=hover`` uses the fixed hover start of -Curriculum checkpoints instead (manifest ``start.hover``):
+arms at the hover pose, plates above the box, box anywhere in the trained hover x/y/yaw range.
 
 Goal: start_policy latches reference x/y + ``goal_xy_offset_m`` and the lift height ``goal_z_m``. The reference
 (``goal_xy_reference``) is the box start x/y (default, training's rule) or ``range_center``, the center of the
@@ -62,6 +64,8 @@ from visualization_msgs.msg import Marker, MarkerArray
 from .boxlift_core import (
     GOAL_QUAT_XYZW,
     box_goal_error,
+    START_HOVER,
+    START_POSES,
     START_PREGRASP_TABLE,
     canonicalize_box_quat,
     check_goal_settings,
@@ -115,6 +119,9 @@ class PPOBoxLiftPolicyNode(Node):
         self.declare_parameter("start_yaw_margin_rad", 0.0)
         self.declare_parameter("rest_z_tolerance_m", 0.03)
         self.declare_parameter("pregrasp_joint_margin_rad", 0.02)
+        # manifest: the checkpoint's start.mode (ready pose / pre-grasp table row); hover: start.hover (-Curriculum)
+        self.declare_parameter("start_pose", "manifest")
+        self.declare_parameter("hover_joint_margin_rad", 0.02)
         self.declare_parameter("shadow_mode", True)
         self.declare_parameter("log_root", "")
         self.declare_parameter("log_task_name", "dual_fr3_boxlift")
@@ -131,6 +138,7 @@ class PPOBoxLiftPolicyNode(Node):
         # fail at startup if z or the x/y offset is outside training; later changes are checked in _on_set_parameters
         goal_z, goal_xy_offset, goal_reference = self._goal_settings()
         check_goal_settings(goal_z, goal_xy_offset, self.manifest, goal_reference)
+        self._check_start_pose(str(self.get_parameter("start_pose").value))
         self.max_policy_target_delta = float(self.get_parameter("max_policy_target_delta_rad").value)
         if not (float(self.manifest.action_clip[1]) < self.max_policy_target_delta <= 1.0):
             raise ValueError(
@@ -155,6 +163,7 @@ class PPOBoxLiftPolicyNode(Node):
         self.goal_handle = None
         self.goal = None
         self.start_table_row: Optional[int] = None
+        self.start_pose_used = ""
         self.previous_action = np.zeros(14, dtype=np.float64)
         self.step_index = 0
         self.sequence = 0
@@ -217,6 +226,8 @@ class PPOBoxLiftPolicyNode(Node):
             f"start {self.manifest.start_mode}"
             + ("" if self.manifest.pregrasp_joint_position is None
                else f" ({len(self.manifest.pregrasp_joint_position)} table rows)")
+            + ("" if self.manifest.hover_joint_position is None else " + hover")
+            + f", using start_pose {self.get_parameter('start_pose').value}"
             + f", goal z {goal_z:.3f} m, goal xy {goal_reference} + {goal_xy_offset.tolist()} m ({trained_xy}), "
             f"mode {'SHADOW' if self.shadow_mode else 'COMMAND'}"
         )
@@ -228,7 +239,27 @@ class PPOBoxLiftPolicyNode(Node):
                 np.asarray(self.get_parameter("goal_xy_offset_m").value, dtype=np.float64),
                 str(self.get_parameter("goal_xy_reference").value))
 
+    def _check_start_pose(self, start_pose: str) -> None:
+        if start_pose not in START_POSES:
+            raise ValueError(f"start_pose must be one of {START_POSES}, got {start_pose!r}")
+        if start_pose == START_HOVER and self.manifest.hover_joint_position is None:
+            raise ValueError("start_pose hover needs a checkpoint with a hover start (manifest start.hover, "
+                             "-Curriculum runs); this one has start.mode " + self.manifest.start_mode)
+
     def _on_set_parameters(self, parameters) -> SetParametersResult:
+        start = {p.name: p.value for p in parameters if p.name in ("start_pose", "hover_joint_margin_rad")}
+        if start:
+            if self.state != "IDLE":
+                return SetParametersResult(successful=False,
+                                           reason=f"start settings can only change while IDLE (session {self.state})")
+            try:
+                if "start_pose" in start:
+                    self._check_start_pose(str(start["start_pose"]))
+                if "hover_joint_margin_rad" in start and not 0.0 <= float(start["hover_joint_margin_rad"]) <= 0.1:
+                    raise ValueError("hover_joint_margin_rad must be within [0, 0.1] rad")
+            except (TypeError, ValueError) as error:
+                return SetParametersResult(successful=False, reason=str(error))
+            self.get_logger().info("start settings accepted: " + ", ".join(f"{k} {v}" for k, v in start.items()))
         changed = {p.name: p.value for p in parameters
                    if p.name in ("goal_z_m", "goal_xy_offset_m", "goal_xy_reference")}
         if not changed:
@@ -319,6 +350,7 @@ class PPOBoxLiftPolicyNode(Node):
         ready, message = self._inputs_ready()
         if not ready:
             return False, message
+        start_pose = str(self.get_parameter("start_pose").value)
         start = check_start_conditions(
             self.joint_position, self.box_position_b, self.box_quat_b, self.manifest,
             ready_tolerance_rad=float(self.get_parameter("ready_tolerance_rad").value),
@@ -326,9 +358,11 @@ class PPOBoxLiftPolicyNode(Node):
             yaw_margin_rad=float(self.get_parameter("start_yaw_margin_rad").value),
             rest_z_tolerance_m=float(self.get_parameter("rest_z_tolerance_m").value),
             pregrasp_joint_margin_rad=float(self.get_parameter("pregrasp_joint_margin_rad").value),
+            start_pose=start_pose,
+            hover_joint_margin_rad=float(self.get_parameter("hover_joint_margin_rad").value),
         )
         if not start.ok:
-            return False, "; ".join(start.reasons)
+            return False, f"[start_pose {start_pose}] " + "; ".join(start.reasons)
         # Training: the goal x/y is the box start x/y (+ the trained offset), z is the lift height;
         # previous action starts at 0. range_center: the goal range center + offset instead.
         goal_z, goal_xy_offset, goal_reference = self._goal_settings()
@@ -337,6 +371,7 @@ class PPOBoxLiftPolicyNode(Node):
         except ValueError as error:
             return False, str(error)
         self.start_table_row = start.table_row
+        self.start_pose_used = START_HOVER if start_pose == START_HOVER else self.manifest.start_mode
         if not self.shadow_mode and not self.action_client.server_is_ready():
             return False, "fr3_policy_control action server is not ready"
 
@@ -357,6 +392,7 @@ class PPOBoxLiftPolicyNode(Node):
         self._open_log()
 
         row = "" if self.start_table_row is None else f", pre-grasp table row {self.start_table_row}"
+        row = (", hover start" if self.start_pose_used == START_HOVER else "") + row
         row += (f", goal {np.round(self.goal[:3], 3).tolist()} m "
                 f"({goal_reference} + offset {goal_xy_offset.tolist()}, z {goal_z})")
         if self.shadow_mode:
@@ -472,6 +508,7 @@ class PPOBoxLiftPolicyNode(Node):
             "session": self.logger_.run_dir.name,
             "model": Path(str(self.actor.model_path)).name,
             "mode": metadata["mode"],
+            "start_pose": metadata.get("start_pose", ""),
             "end_reason": reason,
             "steps": self.logger_.row_count,
             "duration_s": round(self.logger_.row_count * self.manifest.policy_dt, 2),
@@ -507,7 +544,8 @@ class PPOBoxLiftPolicyNode(Node):
                 "box_size_m", "box_size_tolerance_m", "joint_states_topic", "box_pose_topic", "box_position_offset_m", "base_frame",
                 "goal_z_m", "goal_xy_offset_m", "goal_xy_reference", "joint_state_timeout_s", "box_pose_timeout_s", "command_timeout_s", "max_duration_s",
                 "max_policy_target_delta_rad", "ready_tolerance_rad", "start_position_margin_m",
-                "start_yaw_margin_rad", "rest_z_tolerance_m", "pregrasp_joint_margin_rad", "shadow_mode",
+                "start_yaw_margin_rad", "rest_z_tolerance_m", "pregrasp_joint_margin_rad", "start_pose",
+                "hover_joint_margin_rad", "shadow_mode",
             )
         }
         try:
@@ -523,6 +561,7 @@ class PPOBoxLiftPolicyNode(Node):
                     "box_start_quat_base_raw": self.box_quat_b,
                     "box_start_yaw": float(yaw_from_quat(canonicalize_box_quat(self.box_quat_b))),
                     "start_mode": self.manifest.start_mode,
+                    "start_pose": self.start_pose_used,
                     "start_table_row": self.start_table_row,
                     # copy: the logger rewrites metadata at finalize, after joint_position was updated in place
                     "joint_start_position": self.joint_position.copy(),
@@ -578,6 +617,17 @@ class PPOBoxLiftPolicyNode(Node):
                          ((low[0], low[1]), (high[0], low[1]), (high[0], high[1]), (low[0], high[1]),
                           (low[0], low[1]))]
         markers.append(bounds)
+        if self.manifest.hover_joint_position is not None:  # hover start box range (start_pose hover), orange
+            (hx0, hx1), (hy0, hy1) = self.manifest.hover_box_x_range, self.manifest.hover_box_y_range
+            hover = Marker()
+            hover.header.frame_id = self.base_frame
+            hover.ns, hover.id, hover.type, hover.action = "hover_start_bounds", 0, Marker.LINE_STRIP, Marker.ADD
+            hover.pose.orientation.w = 1.0
+            hover.scale.x = 0.003
+            hover.color.r, hover.color.g, hover.color.b, hover.color.a = 1.0, 0.55, 0.0, 1.0
+            hover.points = [Point(x=float(px), y=float(py), z=z + 0.001) for px, py in
+                            ((hx0, hy0), (hx1, hy0), (hx1, hy1), (hx0, hy1), (hx0, hy0))]
+            markers.append(hover)
         return MarkerArray(markers=markers)
 
     def _tick(self) -> None:
