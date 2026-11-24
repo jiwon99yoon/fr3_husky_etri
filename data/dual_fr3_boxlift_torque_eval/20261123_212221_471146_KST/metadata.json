@@ -1,0 +1,478 @@
+{
+  "started_at": "2026-11-23T21:22:21.471146+09:00",
+  "model_path": "/home/husky-rcu/jw_ws/src/fr3_husky/fr3_husky_nn_policy/models/dual_fr3_boxlift_pregrasp_wide_rollalign_curriculum_realdrop_model5999.npz",
+  "model_source_sha256": "665990949c5c2ad50767cf74ac6a49b23beb54b47ecf08ebdf3c3b078c864607",
+  "mode": "command",
+  "goal_base": [
+    0.4245179800452652,
+    -0.015424354645878359,
+    0.2,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "box_start_position_base": [
+    0.4245179800452652,
+    -0.015424354645878359,
+    -0.25105626917235857
+  ],
+  "box_start_quat_base_raw": [
+    0.005301256935927395,
+    -0.024604638070789164,
+    -0.022543971010068803,
+    -0.999428975881429
+  ],
+  "box_start_yaw": 0.04487119145510145,
+  "start_mode": "pregrasp_table",
+  "start_pose": "hover",
+  "start_table_row": null,
+  "joint_start_position": [
+    0.11540985107421875,
+    0.903005063533783,
+    -0.1340331882238388,
+    -1.9636744260787964,
+    -1.0096981525421143,
+    1.5027304887771606,
+    0.4704076647758484,
+    -0.1156407967209816,
+    0.9008901119232178,
+    0.13440164923667908,
+    -1.9618726968765259,
+    1.0101090669631958,
+    1.5110946893692017,
+    1.0998833179473877
+  ],
+  "joint_names": [
+    "left_fr3_joint1",
+    "left_fr3_joint2",
+    "left_fr3_joint3",
+    "left_fr3_joint4",
+    "left_fr3_joint5",
+    "left_fr3_joint6",
+    "left_fr3_joint7",
+    "right_fr3_joint1",
+    "right_fr3_joint2",
+    "right_fr3_joint3",
+    "right_fr3_joint4",
+    "right_fr3_joint5",
+    "right_fr3_joint6",
+    "right_fr3_joint7"
+  ],
+  "parameters": {
+    "box_size_m": [
+      0.31,
+      0.41,
+      0.28
+    ],
+    "box_size_tolerance_m": 0.005,
+    "joint_states_topic": "/dual_fr3/joint_states",
+    "box_pose_topic": "/box_tf",
+    "box_position_offset_m": [
+      0.0,
+      0.0,
+      -0.03
+    ],
+    "base_frame": "base",
+    "goal_z_m": 0.2,
+    "goal_xy_offset_m": [
+      0.0,
+      0.0
+    ],
+    "goal_xy_reference": "box_start",
+    "joint_state_timeout_s": 0.15,
+    "box_pose_timeout_s": 0.3,
+    "command_timeout_s": 0.15,
+    "max_duration_s": 0.0,
+    "max_policy_target_delta_rad": 0.2,
+    "ready_tolerance_rad": 0.2,
+    "start_position_margin_m": 0.01,
+    "start_yaw_margin_rad": 0.0,
+    "rest_z_tolerance_m": 0.05,
+    "pregrasp_joint_margin_rad": 0.02,
+    "start_pose": "hover",
+    "hover_joint_margin_rad": 0.02,
+    "shadow_mode": false
+  },
+  "manifest": {
+    "schema": "dual_fr3_boxlift_manifest/1",
+    "provenance": {
+      "checkpoint": "/home/dyros/dual_fr3_lab/shared_checkpoint/dual_fr3_plate_lift_sim2real_100hz_light_pregrasp_wide_rollalign_curriculum/2026-11-17_16-01-39_curriculum_realdrop_5070/model_5999.pt",
+      "checkpoint_sha256": "665990949c5c2ad50767cf74ac6a49b23beb54b47ecf08ebdf3c3b078c864607",
+      "iteration": 5999,
+      "experiment_name": "dual_fr3_plate_lift_sim2real_100hz_light_pregrasp_wide_rollalign_curriculum",
+      "run_name": "curriculum_realdrop_5070",
+      "env_yaml": "/home/dyros/dual_fr3_lab/shared_checkpoint/dual_fr3_plate_lift_sim2real_100hz_light_pregrasp_wide_rollalign_curriculum/2026-11-17_16-01-39_curriculum_realdrop_5070/params/env.yaml",
+      "env_yaml_sha256": "dbcf5300d9a3d5acf1cdd9dbd2a89694dc300c5ca6ae1591cc4bae894e154607",
+      "git_commit": null,
+      "exported_utc": "2026-11-23T05:53:49.359521+00:00",
+      "exporter": "dual_fr3_lab/scripts/tools/export_boxlift_actor.py"
+    },
+    "policy": {
+      "physics_dt": 0.01,
+      "decimation": 5,
+      "policy_dt": 0.05,
+      "episode_length_s": 6.0,
+      "output_activation": "tanh"
+    },
+    "observation": {
+      "terms": [
+        [
+          "joint_pos",
+          "joint_pos_rel"
+        ],
+        [
+          "joint_vel",
+          "joint_vel_rel"
+        ],
+        [
+          "object_position",
+          "object_position_in_robot_root_frame"
+        ],
+        [
+          "target_object_position",
+          "generated_commands"
+        ],
+        [
+          "actions",
+          "last_action"
+        ],
+        [
+          "object_orientation",
+          "object_orientation_in_robot_root_frame"
+        ]
+      ],
+      "box_pose": "live"
+    },
+    "joints": {
+      "names": [
+        "left_fr3_joint1",
+        "left_fr3_joint2",
+        "left_fr3_joint3",
+        "left_fr3_joint4",
+        "left_fr3_joint5",
+        "left_fr3_joint6",
+        "left_fr3_joint7",
+        "right_fr3_joint1",
+        "right_fr3_joint2",
+        "right_fr3_joint3",
+        "right_fr3_joint4",
+        "right_fr3_joint5",
+        "right_fr3_joint6",
+        "right_fr3_joint7"
+      ],
+      "default_position": [
+        -0.5236,
+        -0.7854,
+        0.0,
+        -2.3562,
+        0.0,
+        1.5708,
+        0.7854,
+        0.5236,
+        -0.7854,
+        0.0,
+        -2.3562,
+        0.0,
+        1.5708,
+        0.7854
+      ]
+    },
+    "action": {
+      "scale": 0.1,
+      "clip": [
+        -0.1,
+        0.1
+      ],
+      "reference_mode": "policy_step",
+      "target_limits": [
+        [
+          -2.6937,
+          2.6937
+        ],
+        [
+          -1.7337,
+          1.7337
+        ],
+        [
+          -2.8507000000000002,
+          2.8507000000000002
+        ],
+        [
+          -2.9921,
+          -0.20179999999999998
+        ],
+        [
+          -2.7565000000000004,
+          2.7565000000000004
+        ],
+        [
+          0.5945,
+          4.4669
+        ],
+        [
+          -2.9659,
+          2.9659
+        ],
+        [
+          -2.6937,
+          2.6937
+        ],
+        [
+          -1.7337,
+          1.7337
+        ],
+        [
+          -2.8507000000000002,
+          2.8507000000000002
+        ],
+        [
+          -2.9921,
+          -0.20179999999999998
+        ],
+        [
+          -2.7565000000000004,
+          2.7565000000000004
+        ],
+        [
+          0.5945,
+          4.4669
+        ],
+        [
+          -2.9659,
+          2.9659
+        ]
+      ],
+      "trained_joint_state_delay_s": [
+        0.0,
+        0.01
+      ],
+      "trained_command_delay_s": [
+        0.0,
+        0.01
+      ]
+    },
+    "box": {
+      "size": [
+        0.31,
+        0.41,
+        0.28
+      ],
+      "size_scale_range": {
+        "x": [
+          0.967741935483871,
+          1.032258064516129
+        ],
+        "y": [
+          0.975609756097561,
+          1.024390243902439
+        ],
+        "z": [
+          0.9642857142857143,
+          1.0357142857142858
+        ]
+      },
+      "nominal_mass": 0.5,
+      "mass_range": [
+        0.4,
+        0.6
+      ],
+      "static_friction_range": [
+        0.4,
+        1.2
+      ],
+      "start_x_range_base": [
+        0.387064208984375,
+        0.5101678466796875
+      ],
+      "start_y_range_base": [
+        -0.11651206970214843,
+        0.1178338623046875
+      ],
+      "start_yaw_range": [
+        -0.1660642350224973,
+        0.16582977335714622
+      ],
+      "rest_center_z_base": -0.265
+    },
+    "goal": {
+      "command_class": "dual_fr3_lab.tasks.manager_based.lift_plate.joint_pos_env_cfg:MixedGoalXYPoseCommand",
+      "z_range_base": [
+        0.15,
+        0.35
+      ],
+      "quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "xy_range_base": {
+        "x": [
+          0.4,
+          0.5
+        ],
+        "y": [
+          -0.1,
+          0.1
+        ]
+      }
+    },
+    "robot": {
+      "root_height_m": 0.405
+    },
+    "start": {
+      "mode": "pregrasp_table",
+      "table_file": "/home/dyros/dual_fr3_lab/source/dual_fr3_lab/dual_fr3_lab/assets/pregrasp/plate_box410wide_pregrasp_gap004_margin005_snapj7.npz",
+      "table_file_trained": "/home/dyros/dual_fr3_lab/source/dual_fr3_lab/dual_fr3_lab/assets/pregrasp/plate_box410wide_pregrasp_gap004_margin005_snapj7.npz",
+      "table_sha256": "cb9e1fa9419956f652d0f29c70aa7d6b3c794591395457cb650ac79cd5c52126",
+      "table_meta": "{'task': 'Isaac-Lift-Box-DualFR3-Plate-Sim2Real-100Hz-Light-Margin-Play-v0', 'gap': 0.04, 'grip_dz': 0.05, 'box_dx': [-0.1, 0.0], 'null': 0.1, 'lim_k': 1.0, 'seed': 0, 'roll_align': False, 'snap_j7': True, 'box_size': [0.31, 0.41, 0.28]}",
+      "rows": 3956,
+      "box_pos_noise_m": 0.01,
+      "box_yaw_noise_rad": 0.05,
+      "joint_noise_rad": 0.01,
+      "arrays": {
+        "joint_position": "pregrasp_joint_position",
+        "box_pose_base": "pregrasp_box_pose_base"
+      },
+      "hover": {
+        "joint_position": [
+          0.117,
+          0.9006,
+          -0.1363,
+          -1.9593,
+          -1.0052,
+          1.5076,
+          0.4869,
+          -0.117,
+          0.9006,
+          0.1363,
+          -1.9593,
+          1.0052,
+          1.5076,
+          1.0839
+        ],
+        "box_x_range_base": [
+          0.4,
+          0.5
+        ],
+        "box_y_range_base": [
+          -0.1,
+          0.1
+        ],
+        "box_yaw_range_rad": [
+          -0.1,
+          0.1
+        ],
+        "joint_noise_rad": 0.01
+      },
+      "box_ranges_base": {
+        "x": [
+          0.387064208984375,
+          0.5101678466796875
+        ],
+        "y": [
+          -0.11651206970214843,
+          0.1178338623046875
+        ],
+        "yaw": [
+          -0.1660642350224973,
+          0.16582977335714622
+        ]
+      }
+    }
+  },
+  "final_box_vs_goal": {
+    "box_position_base": [
+      0.435,
+      -0.0129,
+      0.1762
+    ],
+    "goal_position_base": [
+      0.4245,
+      -0.0154,
+      0.2
+    ],
+    "error_xyz_m": [
+      0.0105,
+      0.0025,
+      -0.0238
+    ],
+    "error_xy_m": 0.0108,
+    "error_m": 0.0262,
+    "box_rpy_deg": [
+      -3.11,
+      -3.51,
+      -4.12
+    ],
+    "goal_rpy_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rpy_error_deg": [
+      -3.11,
+      -3.51,
+      -4.12
+    ],
+    "tilt_deg": 4.68,
+    "start_rpy_deg": [
+      -0.54,
+      2.83,
+      2.57
+    ],
+    "rpy_change_deg": [
+      -2.56,
+      -6.34,
+      -6.69
+    ]
+  },
+  "box_vs_goal_at_session_end": {
+    "box_position_base": [
+      0.4337,
+      -0.0131,
+      0.176
+    ],
+    "goal_position_base": [
+      0.4245,
+      -0.0154,
+      0.2
+    ],
+    "error_xyz_m": [
+      0.0092,
+      0.0024,
+      -0.024
+    ],
+    "error_xy_m": 0.0095,
+    "error_m": 0.0258,
+    "box_rpy_deg": [
+      -3.19,
+      -3.21,
+      -3.93
+    ],
+    "goal_rpy_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rpy_error_deg": [
+      -3.19,
+      -3.21,
+      -3.93
+    ],
+    "tilt_deg": 4.52,
+    "start_rpy_deg": [
+      -0.54,
+      2.83,
+      2.57
+    ],
+    "rpy_change_deg": [
+      -2.65,
+      -6.04,
+      -6.5
+    ]
+  },
+  "ended_at": "2026-11-23T21:22:30.742198+09:00",
+  "end_reason": "controller ended the goal: success=False, 'policy control aborted'",
+  "trace_rows": 185
+}
