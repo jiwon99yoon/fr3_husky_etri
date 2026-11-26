@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FR3 양팔 SysID 실험 (2026-11-26): ready·중간·hover·pregrasp에서
+마찰과 응답</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+  <style>
+  :root {
+    --bg: #f3f5f6; --surface: #ffffff; --surface-2: #eaeef1;
+    --ink: #14191d; --ink-2: #4a535b; --ink-3: #78818a;
+    --line: #dde2e6; --line-2: #c3cbd2; --accent: #2a78d6;
+    --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111416; --surface: #1b1e21; --surface-2: #23282c; --ink: #eceff1; --ink-2: #b3bac1; --ink-3: #868e96;
+      --line: #2c3136; --line-2: #3d444a; --accent: #3987e5; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111416; --surface: #1b1e21; --surface-2: #23282c; --ink: #eceff1; --ink-2: #b3bac1; --ink-3: #868e96;
+    --line: #2c3136; --line-2: #3d444a; --accent: #3987e5; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.7 var(--font-body); word-break: keep-all; overflow-wrap: break-word;
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 1.75rem; line-height: 1.3; margin: 0 0 0.6em; font-weight: 700; }
+  h2 {
+    font-size: 1.3rem; margin: 2.2em 0 0.6em; padding-top: 1em; border-top: 1px solid var(--line-2); font-weight: 600;
+  }
+  h3 { font-size: 1.1rem; margin: 1.6em 0 0.4em; font-weight: 600; }
+  p, ul, ol { margin: 0.6em 0; }
+  li { margin: 0.2em 0; }
+  strong { font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: var(--font-mono); font-size: 0.86em; background: var(--surface-2);
+    padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere;
+  }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  /* 표: 좁은 화면에서는 표만 가로로 스크롤 */
+  table {
+    display: block; width: fit-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 1em 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font-size: 0.93em;
+  }
+  th, td { padding: 7px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td { font-variant-numeric: tabular-nums; }
+  td:first-child { min-width: 5.5em; }
+  /* 수식 */
+  .katex { font-size: 1.08em; }
+  span.math.display {
+    display: block; margin: 0.9em 0; padding: 12px 16px; background: var(--surface);
+    border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px;
+    overflow-x: auto; overflow-y: hidden;
+  }
+  span.math.display .katex-display { margin: 0; }
+  .src-note { color: var(--ink-3); font-size: 0.85em; margin-bottom: 2em; }
+  </style>
+</head>
+<body>
+<main>
+<p class="src-note">원본: fr3_dual_sysid_261126_experi_step.md (이 html은 scripts/tools/md_to_html.sh로 만든 것)</p>
+<h1
+id="fr3-양팔-sysid-실험-2026-11-26-ready중간hoverpregrasp에서-마찰과-응답">FR3
+양팔 SysID 실험 (2026-11-26): ready·중간·hover·pregrasp에서 마찰과
+응답</h1>
+<h2 id="한눈에-보기">한눈에 보기</h2>
+<p><strong>무엇을 하나:</strong> 토크 모드(PD Kp 80, Kd 4, 정책과 같은
+경로)에서 양팔 관절을 하나씩 움직인다. 양팔 <code>robot_state</code>를 1
+kHz bag으로 남긴다.</p>
+<table>
+<thead>
+<tr class="header">
+<th>기호</th>
+<th>시험</th>
+<th>도구</th>
+<th>나오는 것</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>S</td>
+<td>등속 왕복 + 천천히 출발 + 사인 (9/29와 같은 설정)</td>
+<td><code>fr3_sysid_node</code></td>
+<td>c, F_d, c_v, 방향별 F_s, A</td>
+</tr>
+<tr class="even">
+<td>P</td>
+<td>계단 + 사인 + chirp (11-17과 같은 설정)</td>
+<td><code>fr3_command_response_probe</code></td>
+<td>응답·지연, 빠른 움직임 검증용 데이터</td>
+</tr>
+<tr class="odd">
+<td>C</td>
+<td>짧은 등속 왕복 (j1, j2, j4)</td>
+<td><code>fr3_sysid_node</code></td>
+<td>그 자세의 c</td>
+</tr>
+<tr class="even">
+<td>T</td>
+<td>hover에서 j2, j4를 진폭만 줄여 등속 왕복</td>
+<td><code>fr3_sysid_node</code></td>
+<td>같은 속도에서 왕복 길이에 따라 마찰이 바뀌는지</td>
+</tr>
+</tbody>
+</table>
+<p><strong>자세:</strong> R0(9/29 ready) → M(중간) → H(hover) →
+G(pregrasp) → 마지막에 다시 R0.</p>
+<p><strong>시간:</strong> 약 2시간. <strong>로봇 쪽 코드 수정은
+없다.</strong></p>
+<p><strong>결과물</strong> (경로의 <code>261126</code>은 실험 날짜. 다른
+날 하면 8절 명령의 날짜를 모두 바꾼다)</p>
+<table>
+<thead>
+<tr class="header">
+<th>종류</th>
+<th>위치</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>bag (1 kHz)</td>
+<td><code>~/jw_ws/bags/sysid_261126/&lt;label&gt;_&lt;시각&gt;/</code></td>
+</tr>
+<tr class="even">
+<td>sysid CSV</td>
+<td><code>~/jw_ws/src/fr3_husky/data/sysid_dual_261126/&lt;label&gt;/real/</code></td>
+</tr>
+<tr class="odd">
+<td>probe CSV</td>
+<td><code>~/jw_ws/src/fr3_husky/data/command_response/real/&lt;시각&gt;_..._&lt;label&gt;/</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>11-25 계획서(<a
+href="fr3_joint_friction_261125_experi_step.md">fr3_joint_friction_261125_experi_step.md</a>)를
+대신한다. 11-26에 로봇 없이 분석한 결과(1-1)를 보고 아래처럼 바꿨다.
+<ul>
+<li><strong>press 대신 sysid 노드의 등속 왕복을 쓴다.</strong>
+<ul>
+<li><ul>
+<li>방향과 − 방향 토크의 평균이 c이고, 차이의 절반이 마찰이다. 그래서
+c와 마찰이 바로 갈린다.</li>
+</ul></li>
+<li>반환점에서 명령 토크가 10 ms마다 0.01~0.05 Nm씩 올라간다. press
+계단(0.12 Nm)보다 출발 문턱이 촘촘히 나온다.</li>
+</ul></li>
+<li><strong>ready는 9/29 자세(j1 ±0.52)로 한다.</strong> 9/29 양팔·판
+데이터와 바로 비교할 수 있다.</li>
+<li><strong>중간 자세(M)와 pregrasp(G)는 짧은 c 시험만, hover에서는 진폭
+시험(T)을 더 한다.</strong></li>
+</ul></li>
+<li>개념(제어기와 plant 나누기, 토크 정의)은 <a
+href="control.md">control.md</a>와 dual_fr3_lab
+<code>docs/dual_fr3_joint_dynamics.md</code>에 있다.</li>
+</ul>
+<hr />
+<h2 id="1-왜-하나">1. 왜 하나</h2>
+<h3 id="1-1-지금까지">1-1. 지금까지</h3>
+<ul>
+<li><strong>지금 sim 값(SysID 학습 환경)의 출처</strong>
+<ul>
+<li>데이터: 11-17 오른팔 한 팔, Franka Hand, 다른 base.</li>
+<li>방법: Isaac <strong>100 Hz</strong>에서 관절별 CMA-ES로
+fit했다.</li>
+<li>1 kHz에서는 fit한 적이 없다.</li>
+</ul></li>
+<li><strong>11-26 로봇 없이 확인한 것 (9/29 양팔·판 데이터, 11-05 박스
+bag)</strong>
+<ul>
+<li>식별값은 왼팔과 판 EE에도 통한다. 왼팔은 오른팔보다 오차가 약 10 %
+클 뿐이다.</li>
+<li>마찰은 움직인 이력에 따라 다르다. 한 방향으로 길게 갈 때가 짧게
+왕복할 때보다 20~50 % 크다.</li>
+<li>멈췄다 출발하는 문턱은 직전에 움직인 방향 쪽으로 약 0.34 Nm 치우쳐
+있다.</li>
+<li>c는 자세에 따라 다르다. j2가 ready에서 −0.35 Nm, 작업 자세(j2 ≈
+1.6)에서 +0.55 Nm였다.</li>
+</ul></li>
+</ul>
+<h3 id="1-2-가설과-판정-방법">1-2. 가설과 판정 방법</h3>
+<p><strong>가설 1: 같은 관절의 최적값이 조건에 따라 바뀐다. 그래서
+고정값 하나로는 다 못 맞추고, 학습 때 DR이 필요하다.</strong></p>
+<ul>
+<li><strong>조건:</strong> 자세, 팔, 시간·온도, 움직임 이력,
+시뮬레이터(Isaac과 MuJoCo).</li>
+<li><strong>판정 방법:</strong> "조건 i에서 맞춘 값으로 조건 j를 재생한
+오차" 표를 만든다.
+<ul>
+<li>대각선 밖이 <strong>반복 하한</strong>(같은 자세를 두 번 했을 때 R0
+1회차 대 2회차)보다 확실히 크면 맞다.</li>
+<li>그 차이가 DR 범위의 근거다.</li>
+</ul></li>
+<li><strong>값이 아니라 오차로 판정한다.</strong> A, c_v, F_d는 서로
+대신할 수 있다. 그래서 조건마다 값이 달라도 재생 오차는 같을 수
+있다.</li>
+<li><strong>시뮬레이터가 다르면</strong> 마찰 모델 모양부터 다르다.
+Isaac은 F_s, F_d, c_v로 나뉘고, MuJoCo는 <code>frictionloss</code>
+하나다. 같은 데이터·같은 비용으로 각각 fit한다. 이것만으로 나오는 결론은
+"값은 sim마다 따로 맞춰야 하는 등가값"이다. DR의 근거는 각 sim 안에서
+남는 오차와 조건 변동이다.</li>
+</ul>
+<p><strong>가설 2: 100 Hz와 1 kHz에서 잘 맞는 A, c_v 등이
+다르다.</strong></p>
+<ul>
+<li>같은 bag을 Isaac 100 Hz와 1 kHz로 재생해서 fit하고, 서로 값을 바꿔
+넣은 오차를 본다.</li>
+<li>재생은 두 가지로 한다.
+<ul>
+<li><strong>PD 없이:</strong> 실물 τ_J,d를 그대로 넣는다. plant 적분
+몫만 본다.</li>
+<li><strong>PD 넣고:</strong> 실물 명령으로 sim 주기에 맞춰 PD를 돌린다.
+학습 sim과 같은 조건이다.</li>
+</ul></li>
+<li>11-25에 11-17 값으로 PD 없이 재생했을 때는 1 kHz 9.05, 100 Hz 9.27
+mrad로 거의 같았다. 차이가 난다면 PD 토크를 10 ms 동안 그대로 두는
+쪽에서 날 것으로 본다.</li>
+<li>이 영향은 관성이 작은 손목(j5~j7)에서 크다. K_d·dt/(M_jj + A)가
+j6에서 100 Hz 약 0.3, j2에서 약 0.02다.</li>
+</ul>
+<h3 id="1-3-같이-얻는-것">1-3. 같이 얻는 것</h3>
+<ul>
+<li><strong>응답·지연:</strong> P의 계단 도달 시간, 사인 이득과 위상,
+chirp 주파수 응답. ready와 hover, 양팔이다. 11-17은 한 팔뿐이었다.</li>
+<li><strong>명령 경로 지연:</strong> <code>/policy_joint_command</code>
+발행 시각과 τ_J,d가 바뀐 시각의 차이. 11-17은 한 팔 1.9 ms였다. 이번에
+양팔(Husky)에서 분포와 꼬리(p99, 최대)를 본다.</li>
+<li><strong>joint_states 나이:</strong> header 시각과 받은 시각의
+차이.</li>
+</ul>
+<hr />
+<h2 id="2-기록하는-값">2. 기록하는 값</h2>
+<p>양팔 <code>/left_franka_robot_state_broadcaster/robot_state</code>,
+<code>/right_…/robot_state</code>(<code>franka_msgs/FrankaRobotState</code>,
+1 kHz)에 다 들어 있다.</p>
+<table>
+<thead>
+<tr class="header">
+<th>값</th>
+<th>필드</th>
+<th>쓰는 곳</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>τ_J,d (= 우리 τ_cmd)</td>
+<td><code>desired_joint_state.effort</code></td>
+<td><strong>재생 입력.</strong> 11-17에 우리 PD 식으로 다시 계산한 값과
+0.014 Nm 차이, 반영 1.9 ms로 확인했다</td>
+</tr>
+<tr class="even">
+<td>τ_J (관절 토크 센서)</td>
+<td><code>measured_joint_state.effort</code></td>
+<td>확인용(τ_J − τ_J,d ≈ 중력 + 남은 손실), 링크 쪽 fit 비교</td>
+</tr>
+<tr class="odd">
+<td>q, q̇</td>
+<td><code>measured_joint_state.position / velocity</code></td>
+<td>비교 대상, 재생 구간의 시작 상태</td>
+</tr>
+<tr class="even">
+<td>θ, θ̇ (모터 쪽, 링크 단위)</td>
+<td><code>measured_joint_motor_state</code></td>
+<td>관절 비틀림. 11-05에 j1~j4 약 2.2만 Nm/rad로 나왔다</td>
+</tr>
+<tr class="odd">
+<td>외력 추정</td>
+<td><code>tau_ext_hat_filtered</code>, <code>o_f_ext_hat_k</code></td>
+<td>접촉 구간 거르기</td>
+</tr>
+<tr class="even">
+<td>EE 질량</td>
+<td><code>inertia_ee</code></td>
+<td>Desk 설정 확인. 판이면 0.1324 kg</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>각 팔 토픽의 배열은 14칸이다. 그 팔의 7관절이 0~6칸에 들어
+있다.</li>
+<li><strong>bag 크기:</strong> 11-05 박스 bag은 약 9.6 MB/s였다. 시험
+시간을 다 합치면 약 100분이라 <strong>약 55 GB</strong>다. 시작 전에
+디스크를 확인한다(7절).</li>
+<li><strong>sysid CSV는 노드 주기(10 ms)로만 남는다.</strong> 1 kHz
+재생은 bag으로 한다. 그래서 <strong>모든 시험에서 bag을 켠다.</strong>
+dry run만 예외다.</li>
+</ul>
+<hr />
+<h2 id="3-자세">3. 자세</h2>
+<table>
+<thead>
+<tr class="header">
+<th>이름</th>
+<th>왼팔</th>
+<th>오른팔</th>
+<th>이유</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>R0</strong> ready</td>
+<td><code>-0.5236 -0.7854 0 -2.3562 0 1.5708 0.7854</code></td>
+<td><code>0.5236 -0.7854 0 -2.3562 0 1.5708 0.7854</code></td>
+<td>9/29 sysid 자세(측정 q0와 몇 mrad 차이). 노드의 기본 양팔 자세와
+같다</td>
+</tr>
+<tr class="even">
+<td><strong>M</strong> 중간</td>
+<td><code>-0.2033 0.0576 -0.0682 -2.1578 -0.5026 1.5392 0.6362</code></td>
+<td><code>0.2033 0.0576 0.0682 -2.1578 0.5026 1.5392 0.9346</code></td>
+<td>R0와 H의 관절값 가운데. c가 j2를 따라 매끄럽게 이어지는지 본다</td>
+</tr>
+<tr class="odd">
+<td><strong>H</strong> hover</td>
+<td><code>0.1170 0.9006 -0.1363 -1.9593 -1.0052 1.5076 0.4869</code></td>
+<td><code>-0.1170 0.9006 0.1363 -1.9593 1.0052 1.5076 1.0839</code></td>
+<td>박스 정책의 hover 시작 자세(<a
+href="dual_fr3_box_torque_eval_experi_step.md">dual_fr3_box_torque_eval_experi_step.md</a>
+4-1과 같다)</td>
+</tr>
+<tr class="even">
+<td><strong>G</strong> pregrasp</td>
+<td><code>0.0543 1.6190 -0.1589 -1.3667 -0.9633 1.6154 0.5753</code></td>
+<td><code>0.0322 1.6089 0.1799 -1.4290 1.0418 1.6718 0.9569</code></td>
+<td>11-05 실물 정책이 시작한 자세(bag <code>030707</code>, 정지 구간
+평균). c가 가장 컸던 자세</td>
+</tr>
+</tbody>
+</table>
+<p><strong>관절 한계 검사 (노드: 한계에서 0.02 rad 안쪽)</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>자세</th>
+<th>시험</th>
+<th>가장 가까운 한계까지 남는 양</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>R0</td>
+<td>S (±0.15, 손목 ±0.075) / P (±0.12)</td>
+<td>0.55 / 0.58 rad</td>
+</tr>
+<tr class="even">
+<td>H</td>
+<td>S / P / T</td>
+<td>0.77 / 0.80 rad</td>
+</tr>
+<tr class="odd">
+<td>M</td>
+<td>C (±0.05)</td>
+<td>0.85 rad</td>
+</tr>
+<tr class="even">
+<td>G</td>
+<td>C (±0.05)</td>
+<td>0.15 rad</td>
+</tr>
+<tr class="odd">
+<td>G</td>
+<td>S를 한다면 (±0.15)</td>
+<td>0.05 rad. 통과는 한다</td>
+</tr>
+</tbody>
+</table>
+<p>모두 통과한다. G에서 짧은 시험만 하는 이유는 관절 한계가 아니라
+<strong>판과 책상 사이 간격</strong> 때문이다.</p>
+<p><strong>안전</strong></p>
+<ul>
+<li><strong>박스는 치운다.</strong> 판과 손이 아무것에도 닿지 않아야
+한다. 접촉력은 τ_J,d에 없어서, 닿은 구간은 재생이 틀린다.</li>
+<li><strong>H:</strong> S에서 j2를 +0.15 rad 움직이면 판이 약 9 cm
+내려간다. 판 아래 여유를 본다. 한 번에 관절 하나만 움직이므로, 두 판
+사이는 최대 약 8 cm 가까워진다.</li>
+<li><strong>G:</strong> 판이 책상 가까이 있다. C는 ±0.05 rad라 판이 약 3
+cm 움직인다. <strong>H에서 G로 내려갈 때와 G에서 올라올 때 판이 책상에
+닿지 않는지 눈으로 본다.</strong> G에서 R0로 바로 가지 않고 H를
+거친다.</li>
+</ul>
+<hr />
+<h2 id="4-시험">4. 시험</h2>
+<h3 id="s-sysid-노드-rich-프로파일-929와-같은-설정">S: sysid 노드 rich
+프로파일 (9/29와 같은 설정)</h3>
+<ul>
+<li>관절 하나씩, 양팔 14관절을 왼팔 j1~j7, 오른팔 j1~j7 순서로 자동으로
+돈다. 나머지 13관절은 q0에 붙잡혀 있다.</li>
+<li>관절마다 하는 것:
+<ul>
+<li>등속 왕복: 진폭 ±0.15 rad, 속도 0.05 / 0.10 / 0.15 rad/s, 가감속 0.3
+s, 정지 0.4 s.</li>
+<li>왕복 종류는 같은 방향으로 나가기, 방향 바꿔 돌아오기, 반대쪽으로
+나가기, 다시 돌아오기 네 가지다.</li>
+<li>그다음 Hann 창 사인 0.5 / 1 Hz, ±0.05 rad, 3주기.</li>
+</ul></li>
+<li>손목(j5~j7)은 진폭이 절반이다.</li>
+<li>명령 100 Hz. 관절당 약 42 s, <strong>14관절 약 12분</strong>.</li>
+<li>파라미터는 노드 기본값 그대로 둔다. 9/29 launch의 기본값과
+같다.</li>
+</ul>
+<h3 id="p-probe-sweep-11-17과-같은-설정">P: probe sweep (11-17과 같은
+설정)</h3>
+<ul>
+<li>팔 하나씩, j1~j7.
+<ul>
+<li>계단: ±0.02 / 0.05 / 0.10 rad.</li>
+<li>사인: 0.5 / 1 / 2 / 3 Hz.</li>
+<li>chirp: 0.2 → 5 Hz.</li>
+</ul></li>
+<li>명령 20 Hz로 정책과 같은 경로다. trial 21개, <strong>팔당 약
+10분</strong>.</li>
+<li>계단이 목표를 한 번에 바꾼다. 정책이 한 step에 바꾸는 최대 0.20
+rad의 절반 수준이다.</li>
+</ul>
+<h3 id="c-짧은-c-시험">C: 짧은 c 시험</h3>
+<ul>
+<li>관절: j1, j2, j4, 양팔 6개 (sweep 번호 0, 1, 3, 7, 8, 10).</li>
+<li>등속 왕복만 한다. 진폭 ±0.05 rad, 속도 0.05 → 0.10 → 0.05 → 0.10
+rad/s(두 번 반복). 사인은 없다.</li>
+<li><strong>약 3분.</strong></li>
+<li><code>wrist_excitation_scale:=1.0</code>을 꼭 준다.
+<ul>
+<li>노드는 시험하지 않는 손목용 궤적도 미리 만든다.</li>
+<li>손목 배율 0.5면 진폭이 0.025 rad가 된다. 그러면 0.10 rad/s의 가감속
+거리(0.03 rad)보다 짧아서 노드가 시작할 때 거부한다.</li>
+</ul></li>
+</ul>
+<h3 id="t-왕복-길이-시험-hover">T: 왕복 길이 시험 (hover)</h3>
+<ul>
+<li>관절: j2, j4, 양팔 4개 (sweep 번호 1, 3, 8, 10).</li>
+<li>C와 같은 설정이다(진폭 0.05 rad, 속도 0.05 / 0.10).</li>
+<li>같은 자세의 S(진폭 0.15 rad, 같은 속도)와 비교한다. 속도는 같고 한
+방향으로 가는 길이만 다르다.</li>
+<li><strong>약 2분.</strong></li>
+</ul>
+<hr />
+<h2 id="5-순서">5. 순서</h2>
+<table>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>자세</th>
+<th>시험</th>
+<th>label</th>
+<th>시간</th>
+<th>보는 것</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td></td>
+<td>준비: 컨트롤러, 임계값, 확인, R0, dry run</td>
+<td></td>
+<td>15분</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>R0</td>
+<td>S</td>
+<td><code>r0_S1</code></td>
+<td>12분</td>
+<td><strong>전원 켠 직후.</strong> 기준, 9/29와 비교(2달), 시간·온도
+기준</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>R0</td>
+<td>S</td>
+<td><code>r0_S2</code></td>
+<td>12분</td>
+<td><strong>반복 하한</strong>(가설 1의 기준선). 1번 끝나자마자</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td>R0</td>
+<td>P 오른팔</td>
+<td><code>r0_P_R</code></td>
+<td>10분</td>
+<td>응답·지연, 가설 2</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>R0</td>
+<td>P 왼팔</td>
+<td><code>r0_P_L</code></td>
+<td>10분</td>
+<td>팔 차이</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>M</td>
+<td>C</td>
+<td><code>m_C</code></td>
+<td>3분</td>
+<td>자세에 따른 c</td>
+</tr>
+<tr class="odd">
+<td>6</td>
+<td>H</td>
+<td>S</td>
+<td><code>h_S</code></td>
+<td>12분</td>
+<td>자세 의존 (가설 1)</td>
+</tr>
+<tr class="even">
+<td>7</td>
+<td>H</td>
+<td>P 오른팔</td>
+<td><code>h_P_R</code></td>
+<td>10분</td>
+<td>작업 자세의 응답·지연</td>
+</tr>
+<tr class="odd">
+<td>8</td>
+<td>H</td>
+<td>P 왼팔</td>
+<td><code>h_P_L</code></td>
+<td>10분</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>9</td>
+<td>H</td>
+<td>T</td>
+<td><code>h_T</code></td>
+<td>2분</td>
+<td>이력 의존 (6번과 비교)</td>
+</tr>
+<tr class="odd">
+<td>10</td>
+<td>G</td>
+<td>C</td>
+<td><code>g_C</code></td>
+<td>3분</td>
+<td>작업 자세 c (11-05 bag 추정값 +0.55와 비교)</td>
+</tr>
+<tr class="even">
+<td>11</td>
+<td>R0 (H를 거쳐)</td>
+<td>S</td>
+<td><code>r0_S3</code></td>
+<td>12분</td>
+<td><strong>시간·온도</strong> (1번과 비교). 켠 지 1.5시간 이상
+지나서</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>자세 이동까지 더하면 약 2시간이다. 11번 전에 1.5시간이 안 됐으면
+기다린다.</li>
+<li>시간이 모자라면 10 → 5 → 4 → 8 순으로 뺀다. <strong>1, 2, 6, 11은 꼭
+한다.</strong> 3·7도 가능하면 한다.</li>
+</ul>
+<hr />
+<h2 id="6-터미널">6. 터미널</h2>
+<table>
+<thead>
+<tr class="header">
+<th>터미널</th>
+<th>용도</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>T1</td>
+<td>컨트롤러. 세션 내내 켜 둔다</td>
+</tr>
+<tr class="even">
+<td>T2</td>
+<td>짧은 명령: 임계값, 자세 이동, 시험 시작·정지, 확인</td>
+</tr>
+<tr class="odd">
+<td>T3</td>
+<td>bag. 시험마다 켜고 끈다</td>
+</tr>
+<tr class="even">
+<td>T4</td>
+<td>sysid 노드 (S, C, T). 시험마다 다시 띄운다</td>
+</tr>
+<tr class="odd">
+<td>T5</td>
+<td>probe (P). 시험마다 다시 띄운다</td>
+</tr>
+</tbody>
+</table>
+<p><strong>모든 터미널(T1~T5)에서 처음에 한 번:</strong></p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">source</span> ~/jh_ws/ros2_ws/install/setup.bash</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">source</span> ~/jw_ws/install/setup.bash</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> ~/jw_ws/src/fr3_husky</span></code></pre></div>
+<ul>
+<li>jh_ws(franka underlay)를 먼저, jw_ws를 나중에 source한다. 순서와
+빌드 옵션은 <a
+href="fr3_command_response_probe_experi_step.md">fr3_command_response_probe_experi_step.md</a>
+0절과 같다.</li>
+<li>한 터미널에서 확인한다. 아래 명령이 <code>fr3_sysid_node</code>와
+<code>fr3_command_response_probe</code> 두 줄을 내야 한다.
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> pkg executables fr3_husky_nn_policy <span class="kw">|</span> <span class="fu">grep</span> <span class="at">-E</span> <span class="st">&quot;fr3_sysid_node|fr3_command_response_probe&quot;</span></span></code></pre></div></li>
+</ul>
+<p><strong>알아 둘 것</strong></p>
+<ul>
+<li><strong>시작 서비스(T2)는 노드(T4, T5)가 다 뜬 뒤에 따로
+보낸다.</strong> 노드 로그에 설정 줄이 나온 뒤에 보낸다.</li>
+<li><strong>노드는 한 번에 하나만 띄운다.</strong> sysid 노드와 probe는
+같은 PolicyControl action을 쓴다.</li>
+<li><strong>sysid 노드는 launch가 아니라 <code>ros2 run</code>으로
+띄운다.</strong>
+<ul>
+<li><code>fr3_sysid.launch.py</code>는 컨트롤러를 따로 하나 더 띄운다.
+그러면 probe와 번갈아 쓸 때마다 T1을 다시 띄워야 한다.</li>
+<li><code>ros2 run</code>에서는
+<code>-p return_to_start_between_trials:=true</code>를 직접 줘야 한다.
+빠지면 노드가 시작하지 않는다. launch는 이 값을 넣어 준다.</li>
+</ul></li>
+<li><strong>긴 명령은 <code>\</code>로 줄을 나눴다.</strong> 한 덩어리째
+붙여 넣는다.</li>
+</ul>
+<hr />
+<h2 id="7-세션-준비-전원-켜기-전후">7. 세션 준비 (전원 켜기 전후)</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" /><strong>전원 켠 시각을
+적는다.</strong> 11번(시간·온도)의 기준이다.</label></li>
+<li><label><input type="checkbox" /><strong>Husky 받침 기울기를
+잰다.</strong> 휴대폰 수평계를 팔 장착면 근처 윗판에 놓고 앞뒤·좌우
+각도를 적는다. 9/29 j1 토크가 위치에 따라 1.7 Nm/rad로 변하던 것이
+기울기 때문인지 가린다.</label></li>
+<li><label><input type="checkbox" /><strong>디스크:</strong>
+<code>df -h ~</code>에서 남은 공간이 <strong>80 GB 이상</strong>인지
+본다. 모자라면 bag 경로(<code>~/jw_ws/bags/...</code>)를 외장 디스크로
+바꿔서 명령을 친다.</label></li>
+<li><label><input type="checkbox" /><strong>Desk EE 설정이 판인지
+본다.</strong> 0단계 ④에서 0.1324 kg이 나오는지 확인한다. 컨트롤러의
+중력 보상은 Desk 값을 쓴다.</label></li>
+<li><label><input type="checkbox" /><strong>박스를 치운다.</strong> 판
+아래와 주변에 10 cm 이상 비어 있는지 본다.</label></li>
+<li><label><input type="checkbox" /><strong>비상정지를 손에
+둔다.</strong></label></li>
+<li><label><input type="checkbox" /><strong>bag을 기록하는 동안 로봇
+PC에서 colcon 빌드나 무거운 작업을 하지 않는다.</strong> 1 kHz 루프가
+늦어지면 데이터가 끊기거나 reflex가 난다.</label></li>
+</ul>
+<hr />
+<h2 id="8-단계별-명령">8. 단계별 명령</h2>
+<p><strong>모든 시험의 흐름</strong></p>
+<ol type="1">
+<li>(자세를 바꿀 때만) T2: 자세 이동. 끝나고 팔이 멈췄는지 본다.</li>
+<li>T3: bag 시작.</li>
+<li>T4 또는 T5: 노드 실행. 설정 로그를 확인한다.</li>
+<li>T2: 시작 서비스. 응답이 <code>success=True</code>인지 본다.</li>
+<li>끝 메시지를 기다린다.
+<ul>
+<li>sysid: <code>captured repeatable ... home from live q0</code> →
+<code>SysID PolicyControl goal accepted; excitation started</code> →
+<code>SysID sweep complete; stopping at stable q0</code></li>
+<li>probe: <code>q0 latched</code> → <code>[1/21] ...</code> →
+<code>all trials done; q0 is stable</code></li>
+</ul></li>
+<li>T4/T5에서 Ctrl+C → T3에서 Ctrl+C.</li>
+<li>기록 표(10절)에 시작·끝 시각과 특이사항을 적는다.</li>
+</ol>
+<p><strong>중간에 멈출 때 (T2)</strong></p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># sysid 노드(S, C, T)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/stop_probe std_srvs/srv/Trigger {}</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># probe(P)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_command_response_probe/stop_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p>급하면 비상정지를 누른다.</p>
+<h3 id="0-준비-약-15분">0. 준비 (약 15분)</h3>
+<p><strong>① T1: 컨트롤러 (양팔, 토크 모드, MoveIt 포함)</strong></p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch fr3_husky_controller fr3_action_controller.launch.py robot_side:=dual load_gripper:=false command_interface:=effort</span></code></pre></div>
+<p>로그에 <code>dual_fr3_action_controller</code>,
+<code>left_franka_robot_state_broadcaster</code>,
+<code>right_franka_robot_state_broadcaster</code>가 activated로 나와야
+한다.</p>
+<p><strong>② T2: 컨트롤러 확인</strong></p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> control list_controllers <span class="kw">|</span> <span class="fu">grep</span> <span class="at">-E</span> <span class="st">&quot;action_controller|robot_state_broadcaster&quot;</span></span></code></pre></div>
+<p>위 세 개가 <code>active</code>여야 한다.</p>
+<p><strong>③ T2: 충돌 임계값</strong> (T1을 다시 띄울 때마다 다시
+보낸다)</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /service_server/set_force_torque_collision_behavior franka_msgs/srv/SetForceTorqueCollisionBehavior <span class="dt">\</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;{lower_torque_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 80.0], upper_torque_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 80.0], </span><span class="dt">\</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="st">    lower_force_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0], upper_force_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]}&quot;</span></span></code></pre></div>
+<p>응답이 <code>success=True</code>인지 보고 시각을 적는다.</p>
+<p><strong>④ T2: Desk EE 질량 확인</strong> (양팔 모두 0.1324가 나와야
+한다. 다르면 Desk 설정부터 맞춘다)</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> topic echo <span class="at">--once</span> /left_franka_robot_state_broadcaster/robot_state <span class="at">--field</span> inertia_ee.inertia.m</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> topic echo <span class="at">--once</span> /right_franka_robot_state_broadcaster/robot_state <span class="at">--field</span> inertia_ee.inertia.m</span></code></pre></div>
+<p><strong>⑤ T2: R0로 이동</strong> (첫 이동은 팔이 Husky나 서로에게
+가까이 가지 않는지 본다)</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_task_manager move_to_joint <span class="dt">\</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--left-target-positions</span> <span class="at">-0.5236</span> <span class="at">-0.7854</span> 0.0 <span class="at">-2.3562</span> 0.0 1.5708 0.7854 <span class="dt">\</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--right-target-positions</span> 0.5236 <span class="at">-0.7854</span> 0.0 <span class="at">-2.3562</span> 0.0 1.5708 0.7854</span></code></pre></div>
+<p><strong>⑥ dry run: S 설정, j4 한 관절</strong> (bag 없이, 로봇 안
+움직임)</p>
+<p>T4:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=true <span class="dt">\</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/dry_S/real <span class="dt">\</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;sweep_joints:=[3]&quot;</span></span></code></pre></div>
+<p>T4 로그에
+<code>SysID excitation ready: profile=rich, friction=True, inertia=True, dry_run=True</code>가
+나오면 T2:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p>T4 로그에 <code>captured repeatable ... home from live q0</code>와
+시작 로그가 나오면 T4에서 Ctrl+C.</p>
+<p><strong>⑦ dry run: C 설정이 노드에서 거부되지 않는지</strong></p>
+<p>T4:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=true <span class="dt">\</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/dry_C/real <span class="dt">\</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;sweep_joints:=[0, 1, 3, 7, 8, 10]&quot;</span> <span class="dt">\</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> do_inertia_sine:=false <span class="at">-p</span> friction_amplitude_rad:=0.05 <span class="dt">\</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]&quot;</span> <span class="at">-p</span> wrist_excitation_scale:=1.0</span></code></pre></div>
+<p><code>SysID excitation ready: profile=rich, friction=True, inertia=False, dry_run=True</code>가
+나오면 바로 T4에서 Ctrl+C. 시작 서비스는 보내지 않는다.</p>
+<p><strong>⑧ dry run: probe</strong></p>
+<p>T5:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch fr3_husky_nn_policy fr3_command_response_probe.launch.py <span class="dt">\</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  robot:=dual launch_controller:=false command_interface:=effort dry_run:=true <span class="dt">\</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  excite_arm:=right label:=dry <span class="st">&quot;notes:=dry run&quot;</span></span></code></pre></div>
+<p>설정 로그가 나오면 T2:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p>T5 로그에 <code>q0 latched</code>와 <code>[1/21]</code>이 나오면
+T5에서 Ctrl+C.</p>
+<hr />
+<h3 id="1-r0-s-1회차-r0_s1-전원-켠-직후-약-12분">1. R0, S 1회차
+(<code>r0_S1</code>, 전원 켠 직후, 약 12분)</h3>
+<p>팔은 R0에 있다(0단계 ⑤).</p>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/r0_S1_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T4: sysid 노드</strong></p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/r0_S1/real</span></code></pre></div>
+<p><code>SysID excitation ready: profile=rich, friction=True, inertia=True, dry_run=False</code>를
+확인한다.</p>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong>
+<code>SysID sweep complete; stopping at stable q0</code> → T4 Ctrl+C →
+T3 Ctrl+C.</p>
+<h3 id="2-r0-s-2회차-r0_s2-1번-끝나자마자-약-12분">2. R0, S 2회차
+(<code>r0_S2</code>, 1번 끝나자마자, 약 12분)</h3>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/r0_S2_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T4: sysid 노드</strong></p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/r0_S2/real</span></code></pre></div>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong> T4 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="3-r0-p-오른팔-r0_p_r-약-10분">3. R0, P 오른팔
+(<code>r0_P_R</code>, 약 10분)</h3>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/r0_P_R_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T5: probe</strong></p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch fr3_husky_nn_policy fr3_command_response_probe.launch.py <span class="dt">\</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>  robot:=dual launch_controller:=false command_interface:=effort dry_run:=false <span class="dt">\</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>  excite_arm:=right label:=r0_P_R <span class="st">&quot;notes:=dual on Husky, plate EE, pose R0 (9/29 ready)&quot;</span></span></code></pre></div>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong> <code>all trials done; q0 is stable</code>
+→ T5 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="4-r0-p-왼팔-r0_p_l-약-10분">4. R0, P 왼팔 (<code>r0_P_L</code>,
+약 10분)</h3>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/r0_P_L_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T5: probe</strong></p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch fr3_husky_nn_policy fr3_command_response_probe.launch.py <span class="dt">\</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>  robot:=dual launch_controller:=false command_interface:=effort dry_run:=false <span class="dt">\</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>  excite_arm:=left label:=r0_P_L <span class="st">&quot;notes:=dual on Husky, plate EE, pose R0 (9/29 ready)&quot;</span></span></code></pre></div>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong> T5 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="5-m-c-m_c-약-3분">5. M, C (<code>m_C</code>, 약 3분)</h3>
+<p><strong>① T2: M으로 이동</strong> (팔이 멈출 때까지 기다린다)</p>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_task_manager move_to_joint <span class="dt">\</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--left-target-positions</span> <span class="at">-0.2033</span> 0.0576 <span class="at">-0.0682</span> <span class="at">-2.1578</span> <span class="at">-0.5026</span> 1.5392 0.6362 <span class="dt">\</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--right-target-positions</span> 0.2033 0.0576 0.0682 <span class="at">-2.1578</span> 0.5026 1.5392 0.9346</span></code></pre></div>
+<p><strong>② T3: bag</strong></p>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/m_C_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>③ T4: sysid 노드 (짧은 등속 왕복, j1·j2·j4 양팔)</strong></p>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/m_C/real <span class="dt">\</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;sweep_joints:=[0, 1, 3, 7, 8, 10]&quot;</span> <span class="dt">\</span></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> do_inertia_sine:=false <span class="at">-p</span> friction_amplitude_rad:=0.05 <span class="dt">\</span></span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]&quot;</span> <span class="at">-p</span> wrist_excitation_scale:=1.0</span></code></pre></div>
+<p><code>inertia=False</code>, <code>dry_run=False</code>를
+확인한다.</p>
+<p><strong>④ T2: 시작</strong></p>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>⑤ 끝나면:</strong> T4 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="6-h-s-h_s-약-12분">6. H, S (<code>h_S</code>, 약 12분)</h3>
+<p><strong>① T2: H로 이동</strong> (도착 뒤 판 아래 9 cm 이상 비었는지
+본다)</p>
+<div class="sourceCode" id="cb30"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_task_manager move_to_joint <span class="dt">\</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--left-target-positions</span> 0.1170 0.9006 <span class="at">-0.1363</span> <span class="at">-1.9593</span> <span class="at">-1.0052</span> 1.5076 0.4869 <span class="dt">\</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--right-target-positions</span> <span class="at">-0.1170</span> 0.9006 0.1363 <span class="at">-1.9593</span> 1.0052 1.5076 1.0839</span></code></pre></div>
+<p><strong>② T3: bag</strong></p>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/h_S_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>③ T4: sysid 노드</strong></p>
+<div class="sourceCode" id="cb32"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/h_S/real</span></code></pre></div>
+<p><strong>④ T2: 시작</strong></p>
+<div class="sourceCode" id="cb33"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>⑤ 끝나면:</strong> T4 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="7-h-p-오른팔-h_p_r-약-10분">7. H, P 오른팔 (<code>h_P_R</code>,
+약 10분)</h3>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb34"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/h_P_R_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T5: probe</strong></p>
+<div class="sourceCode" id="cb35"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch fr3_husky_nn_policy fr3_command_response_probe.launch.py <span class="dt">\</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>  robot:=dual launch_controller:=false command_interface:=effort dry_run:=false <span class="dt">\</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>  excite_arm:=right label:=h_P_R <span class="st">&quot;notes:=dual on Husky, plate EE, pose hover&quot;</span></span></code></pre></div>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb36"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong> T5 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="8-h-p-왼팔-h_p_l-약-10분">8. H, P 왼팔 (<code>h_P_L</code>, 약
+10분)</h3>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb37"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/h_P_L_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T5: probe</strong></p>
+<div class="sourceCode" id="cb38"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch fr3_husky_nn_policy fr3_command_response_probe.launch.py <span class="dt">\</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>  robot:=dual launch_controller:=false command_interface:=effort dry_run:=false <span class="dt">\</span></span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a>  excite_arm:=left label:=h_P_L <span class="st">&quot;notes:=dual on Husky, plate EE, pose hover&quot;</span></span></code></pre></div>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb39"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong> T5 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="9-h-t-h_t-약-2분">9. H, T (<code>h_T</code>, 약 2분)</h3>
+<p>팔은 H에 있다.</p>
+<p><strong>① T3: bag</strong></p>
+<div class="sourceCode" id="cb40"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/h_T_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>② T4: sysid 노드 (짧은 등속 왕복, j2·j4 양팔)</strong></p>
+<div class="sourceCode" id="cb41"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/h_T/real <span class="dt">\</span></span>
+<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;sweep_joints:=[1, 3, 8, 10]&quot;</span> <span class="dt">\</span></span>
+<span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> do_inertia_sine:=false <span class="at">-p</span> friction_amplitude_rad:=0.05 <span class="dt">\</span></span>
+<span id="cb41-6"><a href="#cb41-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]&quot;</span> <span class="at">-p</span> wrist_excitation_scale:=1.0</span></code></pre></div>
+<p><strong>③ T2: 시작</strong></p>
+<div class="sourceCode" id="cb42"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>④ 끝나면:</strong> T4 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="10-g-c-g_c-약-3분">10. G, C (<code>g_C</code>, 약 3분)</h3>
+<p><strong>① T2: G로 이동</strong> (내려가는 동안 판이 책상에 닿지
+않는지 본다. 도착 뒤 판과 책상 사이가 3 cm 이상인지 본다)</p>
+<div class="sourceCode" id="cb43"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_task_manager move_to_joint <span class="dt">\</span></span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--left-target-positions</span> 0.0543 1.6190 <span class="at">-0.1589</span> <span class="at">-1.3667</span> <span class="at">-0.9633</span> 1.6154 0.5753 <span class="dt">\</span></span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--right-target-positions</span> 0.0322 1.6089 0.1799 <span class="at">-1.4290</span> 1.0418 1.6718 0.9569</span></code></pre></div>
+<p><strong>② T3: bag</strong></p>
+<div class="sourceCode" id="cb44"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/g_C_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>③ T4: sysid 노드 (짧은 등속 왕복, j1·j2·j4 양팔)</strong></p>
+<div class="sourceCode" id="cb45"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/g_C/real <span class="dt">\</span></span>
+<span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;sweep_joints:=[0, 1, 3, 7, 8, 10]&quot;</span> <span class="dt">\</span></span>
+<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> do_inertia_sine:=false <span class="at">-p</span> friction_amplitude_rad:=0.05 <span class="dt">\</span></span>
+<span id="cb45-6"><a href="#cb45-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> <span class="st">&quot;friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]&quot;</span> <span class="at">-p</span> wrist_excitation_scale:=1.0</span></code></pre></div>
+<p><strong>④ T2: 시작</strong></p>
+<div class="sourceCode" id="cb46"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>⑤ 끝나면:</strong> T4 Ctrl+C → T3 Ctrl+C.</p>
+<h3 id="11-r0-s-3회차-r0_s3-켠-지-15시간-이상-약-12분">11. R0, S 3회차
+(<code>r0_S3</code>, 켠 지 1.5시간 이상, 약 12분)</h3>
+<p><strong>① T2: 먼저 H로 올라온다</strong> (G에서 R0로 바로 가지
+않는다)</p>
+<div class="sourceCode" id="cb47"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_task_manager move_to_joint <span class="dt">\</span></span>
+<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--left-target-positions</span> 0.1170 0.9006 <span class="at">-0.1363</span> <span class="at">-1.9593</span> <span class="at">-1.0052</span> 1.5076 0.4869 <span class="dt">\</span></span>
+<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--right-target-positions</span> <span class="at">-0.1170</span> 0.9006 0.1363 <span class="at">-1.9593</span> 1.0052 1.5076 1.0839</span></code></pre></div>
+<p><strong>② T2: R0로 이동</strong></p>
+<div class="sourceCode" id="cb48"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_task_manager move_to_joint <span class="dt">\</span></span>
+<span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--left-target-positions</span> <span class="at">-0.5236</span> <span class="at">-0.7854</span> 0.0 <span class="at">-2.3562</span> 0.0 1.5708 0.7854 <span class="dt">\</span></span>
+<span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--right-target-positions</span> 0.5236 <span class="at">-0.7854</span> 0.0 <span class="at">-2.3562</span> 0.0 1.5708 0.7854</span></code></pre></div>
+<p><strong>③ T3: bag</strong></p>
+<div class="sourceCode" id="cb49"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> ~/jw_ws/bags/sysid_261126 <span class="kw">&amp;&amp;</span> <span class="ex">ros2</span> bag record <span class="at">-o</span> ~/jw_ws/bags/sysid_261126/r0_S3_<span class="va">$(</span><span class="fu">date</span> +%H%M%S<span class="va">)</span> <span class="dt">\</span></span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a>  /dual_fr3/joint_states /policy_joint_command /rosout <span class="dt">\</span></span>
+<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a>  /left_franka_robot_state_broadcaster/robot_state /right_franka_robot_state_broadcaster/robot_state</span></code></pre></div>
+<p><strong>④ T4: sysid 노드</strong></p>
+<div class="sourceCode" id="cb50"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run fr3_husky_nn_policy fr3_sysid_node <span class="at">--ros-args</span> <span class="dt">\</span></span>
+<span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> return_to_start_between_trials:=true <span class="at">-p</span> sweep_mode:=true <span class="at">-p</span> dry_run:=false <span class="dt">\</span></span>
+<span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-p</span> log_root:=<span class="va">$HOME</span>/jw_ws/src/fr3_husky/data/sysid_dual_261126/r0_S3/real</span></code></pre></div>
+<p><strong>⑤ T2: 시작</strong></p>
+<div class="sourceCode" id="cb51"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}</span></code></pre></div>
+<p><strong>⑥ 끝나면:</strong> T4 Ctrl+C → T3 Ctrl+C. 세션 끝. T1은
+마지막에 Ctrl+C.</p>
+<hr />
+<h2 id="9-문제-생길-때">9. 문제 생길 때</h2>
+<table>
+<thead>
+<tr class="header">
+<th>증상</th>
+<th>할 일</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>sysid 노드가 시작할 때
+<code>requires return_to_start_between_trials:=true</code></td>
+<td>T4 명령에서 <code>-p return_to_start_between_trials:=true</code>가
+빠졌다</td>
+</tr>
+<tr class="even">
+<td>sysid 노드가 시작할 때
+<code>friction_amplitude_rad must exceed speed * friction_blend_s</code></td>
+<td>C, T 명령에서 <code>-p wrist_excitation_scale:=1.0</code>이
+빠졌다</td>
+</tr>
+<tr class="odd">
+<td><code>cannot run the full +/-... SysID trajectory inside its ... safe band</code></td>
+<td>자세가 다르다. 그 단계의 move_to_joint를 다시 보내고, 팔이 멈춘 뒤
+시작한다</td>
+</tr>
+<tr class="even">
+<td><code>joint_states has no finite effort ... tau_meas_* will be NaN</code>
+경고</td>
+<td>CSV의 토크 열만 비고, bag의 <code>robot_state</code>에는 τ가 있다.
+계속해도 된다. 기록 표에 적는다</td>
+</tr>
+<tr class="odd">
+<td>시작 서비스가 <code>probe already active or pending</code>이나 q0
+관련 메시지로 거부</td>
+<td>팔이 아직 움직이고 있다. 몇 초 뒤 다시 보낸다</td>
+</tr>
+<tr class="even">
+<td>관절 사이 q0 복귀에서
+<code>timed out after 45.0 s waiting for SysID q0 return</code></td>
+<td>정지마찰 때문에 손목이 허용 오차 0.01 rad 안에 못 돌아온 것일 수
+있다. 시작 서비스를 다시 보낸다. 반복되면 T4 명령 끝에
+<code>-p home_position_tolerance_rad:=0.015</code>를 붙여 다시 띄우고
+기록 표에 적는다</td>
+</tr>
+<tr class="odd">
+<td>probe가 q0로 못 돌아와 타임아웃</td>
+<td>같은 이유다. 시작 서비스를 다시 보낸다. 반복되면 T5 명령에
+<code>"joints:=[1, 2, 3, 4, 5, 6]"</code>처럼 그 관절을 빼고 띄우고
+적는다</td>
+</tr>
+<tr class="even">
+<td>reflex로 멈춤</td>
+<td>T1을 다시 띄우고 0단계 ③ 임계값을 다시 보낸다. 그 시험은 처음부터
+다시 하고, 시각을 적는다</td>
+</tr>
+<tr class="odd">
+<td>bag 기록 중 빌드나 무거운 작업을 했다</td>
+<td>그 시험을 버리고 다시 한다</td>
+</tr>
+<tr class="even">
+<td>디스크가 찬다</td>
+<td>T3 Ctrl+C. 이미 끝난 bag을 외장 디스크로 옮긴 뒤 이어서 한다</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-기록-표">10. 기록 표</h2>
+<p>세션: 날짜 ______, 전원 켠 시각 ______, Husky 기울기 앞뒤 ____° 좌우
+____°, Desk EE ______ kg, 충돌 임계값 넣은 시각 ______</p>
+<table>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>label</th>
+<th>시작</th>
+<th>끝</th>
+<th>켠 뒤 [분]</th>
+<th>결과 (completed / aborted)</th>
+<th>메모 (소리, reflex, 끊김, 재시도)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>r0_S1</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>r0_S2</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>r0_P_R</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>r0_P_L</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td>m_C</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>6</td>
+<td>h_S</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>7</td>
+<td>h_P_R</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>8</td>
+<td>h_P_L</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>9</td>
+<td>h_T</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>g_C</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>11</td>
+<td>r0_S3</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-끝난-뒤">11. 끝난 뒤</h2>
+<p><strong>데이터 옮기기 (로봇 PC → 5070)</strong></p>
+<ul>
+<li>bag(약 55 GB)은 git에 넣지 않는다. 외장 디스크나 rsync로
+옮긴다.</li>
+<li>sysid CSV(<code>data/sysid_dual_261126/</code>)와 probe
+CSV(<code>data/command_response/real/</code>)는 작다.</li>
+<li>dry run 폴더(<code>data/sysid_dual_261126/dry_*</code>, probe의
+<code>..._dry</code>)는 지운다.</li>
+<li>기록 표를 채운 이 문서도 같이 올린다.</li>
+</ul>
+<p><strong>분석 (dual_fr3_lab, 5070)</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>순서</th>
+<th>무엇</th>
+<th>입력</th>
+<th>가설</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>bag → 1 kHz 배열 (q, q̇, τ_J,d, τ_J, θ, 명령)</td>
+<td>양팔 robot_state</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>등속 구간 c·F_d·c_v, 출발 문턱 (11-26 도구)</td>
+<td>S, C, T</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>Isaac 재생 (PD 없이 200 ms 구간 / PD 넣어 폐루프), 1 kHz와 100
+Hz</td>
+<td>전부</td>
+<td>1, 2</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>조건별 CMA-ES fit + bootstrap, "조건 i 값 → 조건 j" 오차 표</td>
+<td>S로 fit, P로 검증</td>
+<td>1, 2</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td>응답 지표 (계단 t50·t90, 사인 이득·위상, chirp), 명령
+지연·joint_states 나이 분포</td>
+<td>P, bag</td>
+<td>응답·지연</td>
+</tr>
+<tr class="even">
+<td>6</td>
+<td>같은 데이터로 MuJoCo fit (팀원과 같은 비용, τ_J,d 기준)</td>
+<td>전부</td>
+<td>1 (시뮬레이터)</td>
+</tr>
+</tbody>
+</table>
+<p>비교할 쌍:</p>
+<table>
+<thead>
+<tr class="header">
+<th>비교</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1 대 2</td>
+<td>반복 하한</td>
+</tr>
+<tr class="even">
+<td>1 대 6 (+ 5·10의 c)</td>
+<td>자세</td>
+</tr>
+<tr class="odd">
+<td>모든 S의 왼팔 대 오른팔</td>
+<td>팔</td>
+</tr>
+<tr class="even">
+<td>1 대 11</td>
+<td>시간·온도</td>
+</tr>
+<tr class="odd">
+<td>1 대 9/29 데이터</td>
+<td>2달</td>
+</tr>
+<tr class="even">
+<td>6 대 9</td>
+<td>왕복 길이 (이력)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="참고">참고</h2>
+<ul>
+<li><a
+href="fr3_joint_friction_261125_experi_step.md">fr3_joint_friction_261125_experi_step.md</a>:
+11-25 계획(이 문서로 대신함), 1-5절 11-17 토크 재생 기준값</li>
+<li><a
+href="fr3_command_response_probe_experi_step.md">fr3_command_response_probe_experi_step.md</a>:
+probe 사용법, source, 빌드 옵션</li>
+<li><code>fr3_husky_nn_policy/fr3_husky_nn_policy/about_sysid.md</code>
+8.4절: 9/29 sysid 수집 방법</li>
+<li><code>data/sysid_260929_README.md</code>,
+<code>data/sysid_raw/real/</code>: 9/29 데이터</li>
+<li>dual_fr3_lab <code>docs/dual_fr3_joint_dynamics.md</code>: 관절
+동역학 식, 11-17 식별값</li>
+</ul>
+</main>
+</body>
+</html>
