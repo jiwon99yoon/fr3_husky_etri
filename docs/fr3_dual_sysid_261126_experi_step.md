@@ -229,7 +229,10 @@ cd ~/jw_ws/src/fr3_husky
 ## 8. 단계별 명령
 
 **모든 시험의 흐름**
-1. (자세를 바꿀 때만) T2: 자세 이동. 끝나고 팔이 멈췄는지 본다.
+1. T2: 그 시험의 자세로 이동. **자세가 같아도 매 시험 전에 다시 보낸다.** 끝나고 팔이 멈췄는지 본다.
+   - 시험이 끝나면 손목·j2·j4가 정지마찰로 q0 근처에 남고, 다음 시험은 그 자리를 새 q0로 잡는다. 11-26 R0에서 S1 → S2 → P_R → P_L로 갈수록 q0가 쌓여 밀렸다(왼팔 j2 0.3 → 6.8 → 11.9 → 17.1 mrad, 오른팔 j4 2.0 → −4.5 → −11.2 → −14.8 mrad).
+   - 다시 이동하면 시험마다 시작 자세와 직전 움직임 이력이 비슷해진다. 1·2·11번(반복 하한, 시간·온도)을 비교할 때 자세 차이가 섞이지 않는다.
+   - move_to_joint도 j7에 약 15 mrad가 남는다(S1 q0). 그래서 완벽히 같은 자세가 되지는 않는다. 쌓이는 것만 막는다.
 2. T3: bag 시작.
 3. T4 또는 T5: 노드 실행. 설정 로그를 확인한다.
 4. T2: 시작 서비스. 응답이 `success=True`인지 본다.
@@ -355,6 +358,13 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 
 ### 2. R0, S 2회차 (`r0_S2`, 1번 끝나자마자, 약 12분)
 
+**⓪ T2: R0로 다시 이동** (앞 시험의 T4/T5를 Ctrl+C한 뒤. 팔이 멈췄는지 본다)
+```bash
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions -0.5236 -0.7854 0.0 -2.3562 0.0 1.5708 0.7854 \
+  --right-target-positions 0.5236 -0.7854 0.0 -2.3562 0.0 1.5708 0.7854
+```
+
 **① T3: bag**
 ```bash
 mkdir -p ~/jw_ws/bags/sysid_261126 && ros2 bag record -o ~/jw_ws/bags/sysid_261126/r0_S2_$(date +%H%M%S) \
@@ -377,6 +387,13 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 **④ 끝나면:** T4 Ctrl+C → T3 Ctrl+C.
 
 ### 3. R0, P 오른팔 (`r0_P_R`, 약 10분)
+
+**⓪ T2: R0로 다시 이동** (앞 시험의 T4/T5를 Ctrl+C한 뒤. 팔이 멈췄는지 본다)
+```bash
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions -0.5236 -0.7854 0.0 -2.3562 0.0 1.5708 0.7854 \
+  --right-target-positions 0.5236 -0.7854 0.0 -2.3562 0.0 1.5708 0.7854
+```
 
 **① T3: bag**
 ```bash
@@ -401,6 +418,13 @@ ros2 service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {
 
 ### 4. R0, P 왼팔 (`r0_P_L`, 약 10분)
 
+**⓪ T2: R0로 다시 이동** (앞 시험의 T4/T5를 Ctrl+C한 뒤. 팔이 멈췄는지 본다)
+```bash
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions -0.5236 -0.7854 0.0 -2.3562 0.0 1.5708 0.7854 \
+  --right-target-positions 0.5236 -0.7854 0.0 -2.3562 0.0 1.5708 0.7854
+```
+
 **① T3: bag**
 ```bash
 mkdir -p ~/jw_ws/bags/sysid_261126 && ros2 bag record -o ~/jw_ws/bags/sysid_261126/r0_P_L_$(date +%H%M%S) \
@@ -415,10 +439,13 @@ ros2 launch fr3_husky_nn_policy fr3_command_response_probe.launch.py \
   excite_arm:=left label:=r0_P_L "notes:=dual on Husky, plate EE, pose R0 (9/29 ready)"
 ```
 
-**③ T2: 시작**
+**③ T2: 복귀 허용치를 넓히고 시작** (T5 설정 로그가 나온 뒤. 순서대로 보낸다)
 ```bash
+ros2 param set /fr3_command_response_probe home_position_tolerance_rad 0.025
 ros2 service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}
 ```
+- 첫 줄 응답이 `Set parameter successful`인지 본다.
+- 기본 허용치 0.01 rad은 Kp 80에서 손목 정지마찰로 남는 오차보다 작다. 11-26 `r0_P_L`에서 왼팔 j5가 −0.10 계단 뒤 q0에서 14.5 mrad 떨어진 채 멈췄고, 30 s 뒤 `timed out waiting for the q0 return to settle`로 중단됐다(오른팔 j5는 9.5 mrad로 간신히 통과). 0.025는 관측 최대 16.8 mrad에 여유를 둔 값이다.
 
 **④ 끝나면:** T5 Ctrl+C → T3 Ctrl+C.
 
@@ -488,6 +515,13 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 
 ### 7. H, P 오른팔 (`h_P_R`, 약 10분)
 
+**⓪ T2: H로 다시 이동** (앞 시험의 T4/T5를 Ctrl+C한 뒤. 팔이 멈췄는지 본다)
+```bash
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions 0.1170 0.9006 -0.1363 -1.9593 -1.0052 1.5076 0.4869 \
+  --right-target-positions -0.1170 0.9006 0.1363 -1.9593 1.0052 1.5076 1.0839
+```
+
 **① T3: bag**
 ```bash
 mkdir -p ~/jw_ws/bags/sysid_261126 && ros2 bag record -o ~/jw_ws/bags/sysid_261126/h_P_R_$(date +%H%M%S) \
@@ -502,14 +536,24 @@ ros2 launch fr3_husky_nn_policy fr3_command_response_probe.launch.py \
   excite_arm:=right label:=h_P_R "notes:=dual on Husky, plate EE, pose hover"
 ```
 
-**③ T2: 시작**
+**③ T2: 복귀 허용치를 넓히고 시작** (T5 설정 로그가 나온 뒤. 순서대로 보낸다)
 ```bash
+ros2 param set /fr3_command_response_probe home_position_tolerance_rad 0.025
 ros2 service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}
 ```
+- 첫 줄 응답이 `Set parameter successful`인지 본다.
+- 기본 허용치 0.01 rad은 Kp 80에서 손목 정지마찰로 남는 오차보다 작다. 11-26 `r0_P_L`에서 왼팔 j5가 −0.10 계단 뒤 q0에서 14.5 mrad 떨어진 채 멈췄고, 30 s 뒤 `timed out waiting for the q0 return to settle`로 중단됐다(오른팔 j5는 9.5 mrad로 간신히 통과). 0.025는 관측 최대 16.8 mrad에 여유를 둔 값이다.
 
 **④ 끝나면:** T5 Ctrl+C → T3 Ctrl+C.
 
 ### 8. H, P 왼팔 (`h_P_L`, 약 10분)
+
+**⓪ T2: H로 다시 이동** (앞 시험의 T4/T5를 Ctrl+C한 뒤. 팔이 멈췄는지 본다)
+```bash
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions 0.1170 0.9006 -0.1363 -1.9593 -1.0052 1.5076 0.4869 \
+  --right-target-positions -0.1170 0.9006 0.1363 -1.9593 1.0052 1.5076 1.0839
+```
 
 **① T3: bag**
 ```bash
@@ -525,16 +569,26 @@ ros2 launch fr3_husky_nn_policy fr3_command_response_probe.launch.py \
   excite_arm:=left label:=h_P_L "notes:=dual on Husky, plate EE, pose hover"
 ```
 
-**③ T2: 시작**
+**③ T2: 복귀 허용치를 넓히고 시작** (T5 설정 로그가 나온 뒤. 순서대로 보낸다)
 ```bash
+ros2 param set /fr3_command_response_probe home_position_tolerance_rad 0.025
 ros2 service call /fr3_command_response_probe/start_probe std_srvs/srv/Trigger {}
 ```
+- 첫 줄 응답이 `Set parameter successful`인지 본다.
+- 기본 허용치 0.01 rad은 Kp 80에서 손목 정지마찰로 남는 오차보다 작다. 11-26 `r0_P_L`에서 왼팔 j5가 −0.10 계단 뒤 q0에서 14.5 mrad 떨어진 채 멈췄고, 30 s 뒤 `timed out waiting for the q0 return to settle`로 중단됐다(오른팔 j5는 9.5 mrad로 간신히 통과). 0.025는 관측 최대 16.8 mrad에 여유를 둔 값이다.
 
 **④ 끝나면:** T5 Ctrl+C → T3 Ctrl+C.
 
 ### 9. H, T (`h_T`, 약 2분)
 
 팔은 H에 있다.
+
+**⓪ T2: H로 다시 이동** (앞 시험의 T4/T5를 Ctrl+C한 뒤. 팔이 멈췄는지 본다)
+```bash
+ros2 run fr3_husky_task_manager move_to_joint \
+  --left-target-positions 0.1170 0.9006 -0.1363 -1.9593 -1.0052 1.5076 0.4869 \
+  --right-target-positions -0.1170 0.9006 0.1363 -1.9593 1.0052 1.5076 1.0839
+```
 
 **① T3: bag**
 ```bash
@@ -550,7 +604,8 @@ ros2 run fr3_husky_nn_policy fr3_sysid_node --ros-args \
   -p log_root:=$HOME/jw_ws/src/fr3_husky/data/sysid_dual_261126/h_T/real \
   -p "sweep_joints:=[1, 3, 8, 10]" \
   -p do_inertia_sine:=false -p friction_amplitude_rad:=0.05 \
-  -p "friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]" -p wrist_excitation_scale:=1.0
+  -p "friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]" -p wrist_excitation_scale:=1.0 \
+  -p home_position_tolerance_rad:=0.025
 ```
 
 **③ T2: 시작**
@@ -583,7 +638,8 @@ ros2 run fr3_husky_nn_policy fr3_sysid_node --ros-args \
   -p log_root:=$HOME/jw_ws/src/fr3_husky/data/sysid_dual_261126/g_C/real \
   -p "sweep_joints:=[0, 1, 3, 7, 8, 10]" \
   -p do_inertia_sine:=false -p friction_amplitude_rad:=0.05 \
-  -p "friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]" -p wrist_excitation_scale:=1.0
+  -p "friction_speeds_rad_s:=[0.05, 0.10, 0.05, 0.10]" -p wrist_excitation_scale:=1.0 \
+  -p home_position_tolerance_rad:=0.025
 ```
 
 **④ T2: 시작**
@@ -620,7 +676,8 @@ mkdir -p ~/jw_ws/bags/sysid_261126 && ros2 bag record -o ~/jw_ws/bags/sysid_2611
 ```bash
 ros2 run fr3_husky_nn_policy fr3_sysid_node --ros-args \
   -p return_to_start_between_trials:=true -p sweep_mode:=true -p dry_run:=false \
-  -p log_root:=$HOME/jw_ws/src/fr3_husky/data/sysid_dual_261126/r0_S3/real
+  -p log_root:=$HOME/jw_ws/src/fr3_husky/data/sysid_dual_261126/r0_S3/real \
+  -p home_position_tolerance_rad:=0.025
 ```
 
 **⑤ T2: 시작**
@@ -641,8 +698,8 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 | `cannot run the full +/-... SysID trajectory inside its ... safe band` | 자세가 다르다. 그 단계의 move_to_joint를 다시 보내고, 팔이 멈춘 뒤 시작한다 |
 | `joint_states has no finite effort ... tau_meas_* will be NaN` 경고 | CSV의 토크 열만 비고, bag의 `robot_state`에는 τ가 있다. 계속해도 된다. 기록 표에 적는다 |
 | 시작 서비스가 `probe already active or pending`이나 q0 관련 메시지로 거부 | 팔이 아직 움직이고 있다. 몇 초 뒤 다시 보낸다 |
-| 관절 사이 q0 복귀에서 `timed out after 45.0 s waiting for SysID q0 return` | 정지마찰 때문에 손목이 허용 오차 0.01 rad 안에 못 돌아온 것일 수 있다. 시작 서비스를 다시 보낸다. 반복되면 T4 명령 끝에 `-p home_position_tolerance_rad:=0.015`를 붙여 다시 띄우고 기록 표에 적는다 |
-| probe가 q0로 못 돌아와 타임아웃 | 같은 이유다. 시작 서비스를 다시 보낸다. 반복되면 T5 명령에 `"joints:=[1, 2, 3, 4, 5, 6]"`처럼 그 관절을 빼고 띄우고 적는다 |
+| 관절 사이 q0 복귀에서 `timed out after 45.0 s waiting for SysID q0 return` | 정지마찰 때문에 손목이 허용 오차 0.01 rad 안에 못 돌아온 것일 수 있다. 시작 서비스를 다시 보낸다. 반복되면 T4 명령 끝에 `-p home_position_tolerance_rad:=0.025`를 붙여 다시 띄우고 기록 표에 적는다(9~11번 명령에는 이미 들어 있다). sysid 노드는 이 값을 시작할 때만 읽으므로 `param set`으로는 안 바뀐다. 남은 관절만 하려면 `"sweep_joints:=[...]"`로 이어서 한다(번호는 0부터, 로그의 `[k/14]`는 1부터). 11-26 `h_S`에서 오른팔 j2가 10.1 mrad로 걸려 `[9, 10, 11, 12, 13]`으로 이어서 했다 |
+| probe가 `timed out waiting for the q0 return to settle`로 중단 | 같은 이유다. 4·7·8번 ③의 `param set`(0.025)을 빠뜨리지 않았는지 본다. 3번처럼 빠진 시험이면 T5를 다시 띄우고 `param set` 뒤 처음부터 다시 한다(q0는 시작할 때 새로 잡힌다). 0.025로도 반복되면 T5 명령에 `"joints:=[1, 2, 3, 4, 5, 6]"`처럼 그 관절을 빼고 띄우고 적는다 |
 | reflex로 멈춤 | T1을 다시 띄우고 0단계 ③ 임계값을 다시 보낸다. 그 시험은 처음부터 다시 하고, 시각을 적는다 |
 | bag 기록 중 빌드나 무거운 작업을 했다 | 그 시험을 버리고 다시 한다 |
 | 디스크가 찬다 | T3 Ctrl+C. 이미 끝난 bag을 외장 디스크로 옮긴 뒤 이어서 한다 |
@@ -651,21 +708,23 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 
 ## 10. 기록 표
 
-세션: 날짜 ______, 전원 켠 시각 ______, Husky 기울기 앞뒤 ____° 좌우 ____°, Desk EE ______ kg, 충돌 임계값 넣은 시각 ______
+세션: 날짜 2026-11-26, 전원 켠 시각 기록 없음(T1 첫 실행 16:26:48. "켠 뒤" 열은 이 시각 기준), Husky 기울기 앞뒤 ____° 좌우 ____°, Desk EE ______ kg, 충돌 임계값 넣은 시각 ______
+
+- 11-26 끝난 뒤: bag 11개(47 GB)와 CSV를 5070(`/home/dyros/bags/sysid_261126/`, `.../fr3_husky_etri/data/fr3_dual_sysid_20261126/`)으로 옮기고 로봇 PC bag은 지웠다. CSV는 로봇 PC에도 남겼다.
 
 | # | label | 시작 | 끝 | 켠 뒤 [분] | 결과 (completed / aborted) | 메모 (소리, reflex, 끊김, 재시도) |
 |---|---|---|---|---|---|---|
-| 1 | r0_S1 | | | | | |
-| 2 | r0_S2 | | | | | |
-| 3 | r0_P_R | | | | | |
-| 4 | r0_P_L | | | | | |
-| 5 | m_C | | | | | |
-| 6 | h_S | | | | | |
-| 7 | h_P_R | | | | | |
-| 8 | h_P_L | | | | | |
-| 9 | h_T | | | | | |
-| 10 | g_C | | | | | |
-| 11 | r0_S3 | | | | | |
+| 1 | r0_S1 | 16:28 | 16:37 | 2 | completed (14/14) | bag `r0_S1_162840`. dry run(16:27~16:28) 뒤 바로 |
+| 2 | r0_S2 | 16:38 | 16:47 | 11 | completed (14/14) | bag `r0_S2_163813` |
+| 3 | r0_P_R | 16:47 | 16:57 | 21 | completed (21/21) | bag `r0_P_R_164729`. 복귀 허용치 0.01(그때는 `param set` 없음). step j5 −0.10 뒤 −9.5 mrad로 간신히 통과 |
+| 4 | r0_P_L | 17:09 | 17:19 | 42 | completed (21/21, 2차) | 1차 16:58~17:00 aborted(4/21): step j5 −0.10 뒤 −14.5 mrad로 `timed out waiting for the q0 return to settle`(tol 0.01). 1차 CSV `261126_165801_dual_r0_P_L` 남김, 1차 bag은 지움. T1 다시 띄움(17:01:51, 17:06:39). 2차는 `param set` tol 0.025, bag `r0_P_L_170901` |
+| 5 | m_C | 17:19 | 17:22 | 53 | completed (6/6) | bag `m_C_171926` |
+| 6 | h_S | 17:23 | 17:35 | 57 | completed (2회로 나눠 함) | 오른팔 j2(sweep 8) 뒤 q0 복귀 타임아웃(−10.1 mrad, tol 0.01). H로 다시 이동 후 `sweep_joints:=[9..13]`, tol 0.025로 이어서 함. CSV는 `h_S/real/` 한 폴더(14개). bag 2개 `h_S_172327` + `h_S_resume_173207` → 11절대로 합친다 |
+| 7 | h_P_R | 17:37 | 17:47 | 71 | completed (21/21) | bag `h_P_R_173719`. tol 0.025 |
+| 8 | h_P_L | 17:48 | 17:58 | 81 | completed (21/21) | probe 끝난 뒤 17:59:11에 디스크가 차서 bag 기록이 `SqliteException ... disk is full`로 비정상 종료. 시험 구간(17:48:17~17:57:48)은 모두 들어 있다(robot_state 양팔 각 약 66.6만 개, 1 kHz, `quick_check` ok). `ros2 bag reindex`로 `metadata.yaml`을 다시 만들고 storage id를 `sqlite3`로 채웠다. 공간 확보로 11-17 bag·CSV·tar(5070에 있음)와 4번 첫 시도 bag `r0_P_L_165752`를 지웠다 |
+| 9 | h_T | 18:04 | 18:06 | 98 | completed (4/4) | bag `h_T_180420`. tol 0.025 |
+| 10 | g_C | 18:07 | 18:10 | 100 | completed (6/6) | bag `g_C_180702`. tol 0.025. 끝난 뒤 T1 종료(18:09:58) |
+| 11 | r0_S3 | | | | 미룸 | 11-26에는 시간이 모자라 못 함. 다른 날 하면 같은 세션의 시간·온도 비교(1 대 11)가 아니라 날짜 간 비교가 된다 |
 
 ---
 
@@ -676,6 +735,20 @@ ros2 service call /fr3_sysid_node/start_probe std_srvs/srv/Trigger {}
 - sysid CSV(`data/sysid_dual_261126/`)와 probe CSV(`data/command_response/real/`)는 작다.
 - dry run 폴더(`data/sysid_dual_261126/dry_*`, probe의 `..._dry`)는 지운다.
 - 기록 표를 채운 이 문서도 같이 올린다.
+
+**나눠 찍은 bag 합치기** (실험이 끝난 뒤. 기록 중에는 하지 않는다. 합친 크기만큼 디스크가 더 필요하다)
+```bash
+cd ~/jw_ws/bags/sysid_261126
+cat > /tmp/merge_h_S.yaml <<'YAML'
+output_bags:
+- uri: h_S_merged
+  storage_id: sqlite3
+  all: true
+YAML
+ros2 bag convert -i h_S_172327 -i h_S_resume_173207 -o /tmp/merge_h_S.yaml
+ros2 bag info h_S_merged   # 메시지 수 = 두 bag의 합인지 본다. 맞으면 원본 두 개를 지운다
+```
+- 두 bag 사이(H로 다시 이동하는 동안, 약 2분)는 비어 있다. 분석에서는 관절별 구간을 `/rosout`이나 CSV 시각으로 자르므로 문제없다.
 
 **분석 (dual_fr3_lab, 5070)**
 
